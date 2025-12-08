@@ -51,4 +51,7 @@ export interface DashboardStats {
   totalThreats: number
   criticalThreats: number
   recentAnalyses: number
+  threatsOverTime: { date: string; count: number }[]
+  threatDistribution: { name: string; value: number }[]
+  severityDistribution: { name: string; value: number }[]
 }

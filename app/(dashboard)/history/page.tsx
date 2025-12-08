@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { formatDate, formatBytes, getThreatColor } from '@/lib/utils'
 import { FileText, Clock, AlertTriangle, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import AnalysisReport from '@/components/AnalysisReport'
 
 interface LogFileWithAnalysis {
   id: string
@@ -51,10 +52,10 @@ export default function HistoryPage() {
 
   const getSeverityCounts = (analyses: any[]) => {
     if (!analyses || analyses.length === 0) return { critical: 0, high: 0, medium: 0, low: 0 }
-    
+
     const latestAnalysis = analyses[0]
     const threats = latestAnalysis.threats || []
-    
+
     return {
       critical: threats.filter((t: any) => t.severity === 'CRITICAL').length,
       high: threats.filter((t: any) => t.severity === 'HIGH').length,
@@ -135,12 +136,12 @@ export default function HistoryPage() {
                       <div className="w-12 h-12 rounded-xl bg-cyber-blue/10 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-6 h-6 text-cyber-blue" />
                       </div>
-                      
+
                       <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-semibold text-white mb-1 truncate">
                           {log.originalName}
                         </h3>
-                        
+
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-3">
                           <div className="flex items-center space-x-1">
                             <Clock className="w-4 h-4" />
@@ -153,8 +154,8 @@ export default function HistoryPage() {
                             <span className={cn(
                               "px-2 py-1 rounded-full text-xs font-medium",
                               log.status === 'COMPLETED' ? "bg-cyber-green/10 text-cyber-green" :
-                              log.status === 'FAILED' ? "bg-cyber-red/10 text-cyber-red" :
-                              "bg-gray-700 text-gray-300"
+                                log.status === 'FAILED' ? "bg-cyber-red/10 text-cyber-red" :
+                                  "bg-gray-700 text-gray-300"
                             )}>
                               {log.status}
                             </span>
@@ -169,7 +170,7 @@ export default function HistoryPage() {
                                 {latestAnalysis.threatCount} threats
                               </span>
                             </div>
-                            
+
                             <div className="flex items-center space-x-2">
                               {severityCounts.critical > 0 && (
                                 <span className={cn("text-xs px-2 py-1 rounded-full", getThreatColor('CRITICAL'))}>
@@ -192,7 +193,12 @@ export default function HistoryPage() {
                       </div>
                     </div>
 
-                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-cyber-blue group-hover:translate-x-1 transition-all flex-shrink-0" />
+                    <div className="flex items-center space-x-4">
+                      {hasAnalysis && latestAnalysis && (
+                        <AnalysisReport analysis={latestAnalysis} logFile={log} />
+                      )}
+                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-cyber-blue group-hover:translate-x-1 transition-all flex-shrink-0" />
+                    </div>
                   </div>
                 </div>
               )

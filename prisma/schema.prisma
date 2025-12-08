@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -98,6 +99,11 @@ model Threat {
   timestamp   DateTime?
   rawLog      String?
   confidence  Float?        // 0-1 score from AI model
+  
+  // Geolocation
+  sourceLat   Float?
+  sourceLon   Float?
+  sourceCountry String?
   
   analysisId  String
   analysis    Analysis      @relation(fields: [analysisId], references: [id], onDelete: Cascade)

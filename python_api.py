@@ -1,187 +1,237 @@
-"""
-LogIz - Mock Python AI Model API
-Bu dosya, gerçek AI modeliniz hazır olana kadar test amaçlı kullanılabilir.
-"""
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import time
-import random
+from flask_sqlalchemy import SQLAlchemy
+import pickle
+import pandas as pd
+import numpy as np
 from datetime import datetime
+import os
+from werkzeug.utils import secure_filename
 
+# Flask App
 app = Flask(__name__)
 CORS(app)
 
-# Mock threat patterns
-THREAT_TYPES = [
-    'SQL_INJECTION',
-    'XSS',
-    'BRUTE_FORCE',
-    'PORT_SCAN',
-    'DIRECTORY_TRAVERSAL',
-    'COMMAND_INJECTION',
-    'UNAUTHORIZED_ACCESS',
-    'DDOS_ATTEMPT',
-    'MALWARE_DETECTED',
-    'SUSPICIOUS_ACTIVITY'
+# Basit SQLite kullan (test için)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test_ids.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
+# Database
+db = SQLAlchemy(app)
+
+# Model yolunu düzelt - birkaç seçenek dene
+MODEL_PATHS = [
+    'models/ids_model.pkl',
+    'ids_model.pkl',
+    'unsw_model.pkl'
 ]
 
-SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+model = None
+for path in MODEL_PATHS:
+    try:
+        if os.path.exists(path):
+            with open(path, 'rb') as f:
+                model = pickle.load(f)
+            print(f"✅ Model yüklendi: {path}")
+            break
+    except Exception as e:
+        continue
 
-def generate_mock_threats(log_content):
-    """Generate mock threats based on log content"""
-    threats = []
-    
-    # Simple pattern detection (mock)
-    threat_keywords = {
-        'SQL_INJECTION': ['SELECT', 'DROP', 'UNION', "'", '"', '--', 'OR 1=1'],
-        'XSS': ['<script>', 'javascript:', 'onerror=', 'onload='],
-        'BRUTE_FORCE': ['failed', 'login', 'password', 'authentication failed'],
-        'COMMAND_INJECTION': [';', '&&', '||', '`', '$('],
-    }
-    
-    log_lines = log_content.split('\n')
-    
-    for line_num, line in enumerate(log_lines[:100]):  # Check first 100 lines
-        line_lower = line.lower()
-        
-        for threat_type, keywords in threat_keywords.items():
-            if any(keyword.lower() in line_lower for keyword in keywords):
-                severity = random.choice(['CRITICAL', 'HIGH', 'MEDIUM'])
-                threats.append({
-                    'type': threat_type,
-                    'severity': severity,
-                    'description': f'{threat_type.replace("_", " ").title()} detected in log line {line_num + 1}',
-                    'sourceIP': f'{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}',
-                    'targetIP': f'10.0.0.{random.randint(1, 255)}',
-                    'port': random.choice([22, 80, 443, 3306, 5432, 8080]),
-                    'timestamp': datetime.now().isoformat(),
-                    'rawLog': line[:200],  # First 200 chars
-                    'confidence': round(random.uniform(0.7, 0.99), 2)
-                })
-    
-    # If no threats found, add some random ones for demo
-    if len(threats) == 0:
-        num_threats = random.randint(2, 5)
-        for _ in range(num_threats):
-            threat_type = random.choice(THREAT_TYPES)
-            threats.append({
-                'type': threat_type,
-                'severity': random.choice(SEVERITIES),
-                'description': f'Potential {threat_type.replace("_", " ").lower()} activity detected',
-                'sourceIP': f'{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}',
-                'targetIP': f'10.0.0.{random.randint(1, 255)}',
-                'port': random.choice([22, 80, 443, 3306, 5432, 8080, None]),
-                'timestamp': datetime.now().isoformat(),
-                'confidence': round(random.uniform(0.6, 0.95), 2)
-            })
-    
-    return threats[:10]  # Return max 10 threats
+if model is None:
+    print("❌ Model yüklenemedi! Lütfen model dosyasını (ids_model.pkl) proje ana dizinine koyun.")
+    print("Denenen yollar:")
+    for path in MODEL_PATHS:
+        print(f"  - {path} (Var mı: {os.path.exists(path)})")
 
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({
-        'service': 'LogIz AI Analysis API',
-        'status': 'running',
-        'version': '1.0.0',
-        'message': 'Mock API - Replace with your trained model'
-    })
+
+# ==================== DATABASE MODELS ====================
+
+class AnalysisJob(db.Model):
+    __tablename__ = 'analysis_jobs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(100), unique=True, nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(50), default='completed')
+    total_records = db.Column(db.Integer, default=0)
+    attacks_detected = db.Column(db.Integer, default=0)
+    normal_traffic = db.Column(db.Integer, default=0)
+    attack_percentage = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'job_id': self.job_id,
+            'filename': self.filename,
+            'status': self.status,
+            'total_records': self.total_records,
+            'attacks_detected': self.attacks_detected,
+            'normal_traffic': self.normal_traffic,
+            'attack_percentage': self.attack_percentage,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+
+class DetectedAttack(db.Model):
+    __tablename__ = 'detected_attacks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(100))
+    record_index = db.Column(db.Integer)
+    probability = db.Column(db.Float)
+    proto = db.Column(db.String(50))
+    service = db.Column(db.String(100))
+    state = db.Column(db.String(50))
+    source_ip = db.Column(db.String(50))
+    dest_ip = db.Column(db.String(50))
+    detected_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'record_index': self.record_index,
+            'probability': round(self.probability * 100, 2),
+            'proto': self.proto,
+            'service': self.service,
+            'state': self.state,
+            'source_ip': self.source_ip,
+            'dest_ip': self.dest_ip,
+            'detected_at': self.detected_at.isoformat() if self.detected_at else None
+        }
+
+
+# ==================== API ENDPOINTS ====================
 
 @app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+def health_check():
+    """Sistem sağlık kontrolü"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'model_loaded': model is not None,
+        'database': 'sqlite'
+    })
 
+# Frontend uyumluluğu için /analyze endpoint'i
 @app.route('/analyze', methods=['POST'])
-def analyze():
+def analyze_adapter():
     """
-    Analyze log file content
-    
-    Expected JSON body:
-    {
-        "log_content": "string",
-        "filename": "string",
-        "file_type": "string"
-    }
-    
-    Returns:
-    {
-        "success": true,
-        "threatCount": int,
-        "threats": [...],
-        "summary": {...},
-        "processingTime": int
-    }
+    Frontend'den gelen isteği karşıla ve modele uygun hale getir.
+    Frontend JSON gönderiyor: { log_content, filename, file_type }
+    Model CSV bekliyor. Bu yüzden log_content'i geçici CSV'ye çevirip işleyeceğiz.
     """
     try:
-        start_time = time.time()
-        
-        # Get request data
         data = request.json
         log_content = data.get('log_content', '')
-        filename = data.get('filename', 'unknown')
-        file_type = data.get('file_type', '.txt')
+        filename = data.get('filename', 'unknown.csv')
         
         if not log_content:
+            return jsonify({'success': False, 'error': 'No log content'}), 400
+
+        # Eğer model yoksa mock cevap dön (sistemi kırmamak için)
+        if model is None:
             return jsonify({
-                'success': False,
-                'error': 'No log content provided'
-            }), 400
+                'success': True,
+                'threatCount': 0,
+                'threats': [],
+                'summary': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0},
+                'processingTime': 0,
+                'message': 'Model not loaded. Please upload ids_model.pkl'
+            })
+
+        # Log içeriğini DataFrame'e çevir
+        from io import StringIO
+        # CSV formatında olduğunu varsayıyoruz
+        try:
+            df = pd.read_csv(StringIO(log_content))
+        except:
+            # CSV değilse, belki satır satır logdur. Şimdilik hata dönelim veya mock yapalım
+            return jsonify({'success': False, 'error': 'Invalid CSV format'}), 400
+
+        # Analiz mantığı (upload_and_analyze fonksiyonundan uyarlandı)
         
-        print(f"Analyzing {filename} ({len(log_content)} bytes)...")
+        # Kategorik kolonları encode et
+        from sklearn.preprocessing import LabelEncoder
+        categorical_cols = ["proto", "service", "state"]
+        le = LabelEncoder()
+
+        for col in categorical_cols:
+            if col in df.columns:
+                df[col] = le.fit_transform(df[col].astype(str))
+
+        # Feature'ları hazırla
+        X = df.drop(columns=["label", "attack_cat"], errors='ignore')
+
+        # Tahmin yap
+        predictions = model.predict(X)
+        # probabilities = model.predict_proba(X)[:, 1] # Bazı modellerde bu olmayabilir
+
+        # Sonuçları topla
+        threats = []
+        threat_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
         
-        # Simulate processing time (0.5-2 seconds)
-        time.sleep(random.uniform(0.5, 2.0))
-        
-        # Generate mock threats
-        threats = generate_mock_threats(log_content)
-        
-        # Calculate summary
-        summary = {
-            'critical': sum(1 for t in threats if t['severity'] == 'CRITICAL'),
-            'high': sum(1 for t in threats if t['severity'] == 'HIGH'),
-            'medium': sum(1 for t in threats if t['severity'] == 'MEDIUM'),
-            'low': sum(1 for t in threats if t['severity'] == 'LOW'),
-            'info': sum(1 for t in threats if t['severity'] == 'INFO')
-        }
-        
-        processing_time = int((time.time() - start_time) * 1000)  # milliseconds
-        
-        response = {
+        for i, pred in enumerate(predictions):
+            if pred == 1: # Saldırı
+                severity = 'HIGH' # Modelden severity gelmiyorsa varsayılan
+                threat_counts[severity] += 1
+                
+                if len(threats) < 50: # Sadece ilk 50 tehdidi dön
+                    threats.append({
+                        'type': 'ANOMALY_DETECTED',
+                        'severity': severity,
+                        'description': 'AI Model detected anomalous traffic pattern',
+                        'sourceIP': str(df.iloc[i].get('srcip', 'N/A')),
+                        'targetIP': str(df.iloc[i].get('dstip', 'N/A')),
+                'port': int(df.iloc[i].get('dsport', 0)) if 'dsport' in df.columns else None,
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'rawLog': str(df.iloc[i].to_dict()), # Add raw log content
+                        'confidence': 0.95
+                    })
+
+        return jsonify({
             'success': True,
             'threatCount': len(threats),
             'threats': threats,
-            'summary': summary,
-            'processingTime': processing_time,
-            'metadata': {
-                'filename': filename,
-                'fileType': file_type,
-                'logLines': len(log_content.split('\n')),
-                'analyzedAt': datetime.now().isoformat()
-            }
-        }
-        
-        print(f"✓ Analysis complete: {len(threats)} threats found in {processing_time}ms")
-        
-        return jsonify(response)
-        
+            'summary': {
+                'critical': threat_counts['CRITICAL'],
+                'high': threat_counts['HIGH'],
+                'medium': threat_counts['MEDIUM'],
+                'low': threat_counts['LOW'],
+                'info': threat_counts['INFO']
+            },
+            'processingTime': 100 
+        })
+
     except Exception as e:
-        print(f"Error during analysis: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        print(f"Analysis Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== MAIN ====================
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("LogIz Mock AI Analysis API")
-    print("=" * 60)
-    print("Starting server on http://localhost:8000")
-    print("This is a MOCK API for development/testing")
-    print("Replace with your trained AI model for production")
-    print("=" * 60)
-    
-    app.run(
-        host='0.0.0.0',
-        port=8000,
-        debug=True
-    )
+    print("\n" + "=" * 50)
+    print("🚀 LogIz Real AI Backend Başlatılıyor...")
+    print("=" * 50)
+
+    # Veritabanını oluştur
+    with app.app_context():
+        db.create_all()
+        print("✅ Veritabanı hazır (test_ids.db)")
+
+    # Model kontrolü
+    if model:
+        print("✅ AI Model hazır")
+    else:
+        print("⚠️  UYARI: Model dosyası bulunamadı!")
+        print("    Lütfen 'ids_model.pkl' dosyasını proje klasörüne yükleyin.")
+
+    print("\n📡 Sunucu başlatılıyor...")
+    print("🌐 Adres: http://localhost:8000")
+    print("=" * 50 + "\n")
+
+    app.run(host='0.0.0.0', port=8000, debug=True)

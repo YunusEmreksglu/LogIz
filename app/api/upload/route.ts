@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    
+
     if (!file) {
       return NextResponse.json(
         { error: 'No file provided' },
@@ -17,11 +17,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024
+    // Validate file size (default 50MB)
+    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '52428800')
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File size exceeds 50MB limit' },
+        { error: 'File size exceeds limit' },
         { status: 400 }
       )
     }
@@ -39,19 +39,22 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const timestamp = Date.now()
     const filename = `${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-    
+
     // Save file to disk
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    const uploadDir = join(process.cwd(), 'public', 'uploads')
+    const uploadDir = process.env.UPLOAD_DIR
+      ? join(process.cwd(), process.env.UPLOAD_DIR)
+      : join(process.cwd(), 'public', 'uploads')
+
     const filePath = join(uploadDir, filename)
-    
+
     await writeFile(filePath, buffer)
 
     // Get userId from session (if logged in)
     const session = await getServerSession(authOptions)
     const userId = session?.user?.id || `guest-${timestamp}`
-    
+
     const logFile = await prisma.logFile.create({
       data: {
         filename,
