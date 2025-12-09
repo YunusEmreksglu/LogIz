@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import FileUpload from '@/components/FileUpload'
+import AnalysisProgress from '@/components/AnalysisProgress'
 import { CheckCircle, Loader, AlertCircle, LogIn } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -34,7 +35,7 @@ export default function UploadPage() {
       }
 
       const uploadData = await uploadResponse.json()
-      
+
       // Start analysis
       setUploading(false)
       setAnalyzing(true)
@@ -88,8 +89,8 @@ export default function UploadPage() {
           )}
         </div>
 
-        {/* Upload Component */}
-        <FileUpload onUpload={handleUpload} />
+        {/* Upload Component - Hide while analyzing */}
+        {!analyzing && !result && <FileUpload onUpload={handleUpload} />}
 
         {/* Error Message */}
         {error && (
@@ -106,19 +107,7 @@ export default function UploadPage() {
 
         {/* Analysis Status */}
         {analyzing && (
-          <div className="mt-8 p-6 rounded-xl bg-gray-900/50 backdrop-blur-sm border border-gray-700">
-            <div className="flex items-center space-x-4">
-              <Loader className="w-6 h-6 text-cyber-blue animate-spin" />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1">
-                  Log Dosyanız Analiz Ediliyor...
-                </h3>
-                <p className="text-sm text-gray-400">
-                  UNSW-NB15 veri seti ile 175.000+ saldırı pattern&apos;i taranıyor
-                </p>
-              </div>
-            </div>
-          </div>
+          <AnalysisProgress />
         )}
 
         {/* Success Result */}
@@ -143,7 +132,7 @@ export default function UploadPage() {
                       </span>
                     </div>
                   </div>
-                  
+
                   {!session && (
                     <div className="mt-4 p-4 bg-gray-900 rounded-lg border border-gray-700">
                       <div className="flex items-center space-x-3 mb-3">
@@ -169,7 +158,7 @@ export default function UploadPage() {
                       </div>
                     </div>
                   )}
-                  
+
                   {result.threats && result.threats.length > 0 && (
                     <div className="mt-4">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">Tespit Edilen Tehditler:</h4>
@@ -178,11 +167,10 @@ export default function UploadPage() {
                           <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-700">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-medium text-white">{threat.type}</span>
-                              <span className={`text-xs px-2 py-1 rounded ${
-                                threat.severity === 'CRITICAL' ? 'bg-cyber-red/20 text-cyber-red' :
+                              <span className={`text-xs px-2 py-1 rounded ${threat.severity === 'CRITICAL' ? 'bg-cyber-red/20 text-cyber-red' :
                                 threat.severity === 'HIGH' ? 'bg-cyber-yellow/20 text-cyber-yellow' :
-                                'bg-cyber-blue/20 text-cyber-blue'
-                              }`}>
+                                  'bg-cyber-blue/20 text-cyber-blue'
+                                }`}>
                                 {threat.severity}
                               </span>
                             </div>

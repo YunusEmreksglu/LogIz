@@ -154,17 +154,48 @@ def analyze_adapter():
 
         # Analiz mantığı (upload_and_analyze fonksiyonundan uyarlandı)
         
-        # Kategorik kolonları encode et
-        from sklearn.preprocessing import LabelEncoder
+        # Kategorik kolonları encode et (Save edilmiş encoder'ları kullan)
         categorical_cols = ["proto", "service", "state"]
-        le = LabelEncoder()
-
+        le_dict = None
+        
+        # Encoderları yükle
+        ENCODER_PATH = 'encoders.pkl'
+        if os.path.exists(ENCODER_PATH):
+            with open(ENCODER_PATH, 'rb') as f:
+                le_dict = pickle.load(f)
+        
         for col in categorical_cols:
             if col in df.columns:
-                df[col] = le.fit_transform(df[col].astype(str))
+                df[col] = df[col].astype(str)
+                
+                if le_dict and col in le_dict:
+                    le = le_dict[col]
+                    # Bilinmeyen değerleri 'unknown' yap (veya en sık tekrar edene ata)
+                    known_classes = set(le.classes_)
+                    # Eğer 'unknown' class'ı varsa ona ata, yoksa class[0]'a ata
+                    fallback_value = 'unknown' if 'unknown' in known_classes else le.classes_[0]
+                    
+                    df[col] = df[col].apply(lambda x: x if x in known_classes else fallback_value)
+                    df[col] = le.transform(df[col])
+                else:
+                    # Fallback
+                    from sklearn.preprocessing import LabelEncoder
+                    le = LabelEncoder()
+                    df[col] = le.fit_transform(df[col])
 
         # Feature'ları hazırla
+        # Feature'ları hazırla
         X = df.drop(columns=["label", "attack_cat"], errors='ignore')
+
+        # Feature Alignment (Modelin beklediği sıraya ve sütunlara göre ayarla)
+        if hasattr(model, 'feature_names_in_'):
+            expected_cols = list(model.feature_names_in_)
+            # Eksik kolonlar varsa 0 ekle, fazla varsa at
+            for col in expected_cols:
+                if col not in X.columns:
+                    X[col] = 0
+            # Sadece modelin bildiği kolonları, doğru sırada seç
+            X = X[expected_cols]
 
         # Tahmin yap
         predictions = model.predict(X)

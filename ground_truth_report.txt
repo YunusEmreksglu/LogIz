@@ -1,0 +1,23 @@
+📂 Analyzing 123.csv...
+
+📊 'label' Column Distribution (0=Normal, 1=Attack):
+label
+1    119341
+0     56000
+Name: count, dtype: int64
+
+📊 'attack_cat' Column Distribution:
+attack_cat
+Normal            56000
+Generic           40000
+Exploits          33393
+Fuzzers           18184
+DoS               12264
+Reconnaissance    10491
+Analysis           2000
+Backdoor           1746
+Shellcode          1133
+Worms               130
+Name: count, dtype: int64
+
+⚡ Records with high 'rate' (>1000): 103055

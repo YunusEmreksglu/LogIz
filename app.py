@@ -22,9 +22,10 @@ db = SQLAlchemy(app)
 
 # Model yolunu düzelt - birkaç seçenek dene
 MODEL_PATHS = [
+    'ids_model.pkl',  # Repo kök dizininde
     'models/ids_model.pkl',
     '../models/ids_model.pkl',
-    r'C:\Users\smt1s\OneDrive\Masaüstü\ids-project\models\ids_model.pkl'
+    r'C:\Users\smt1s\OneDrive\Belgeler\GitHub\LogIz\ids_model.pkl'
 ]
 
 model = None
@@ -124,16 +125,50 @@ def upload_and_analyze():
     if model is None:
         return jsonify({'error': 'Model yüklenmedi'}), 500
 
-    if 'file' not in request.files:
-        return jsonify({'error': 'Dosya bulunamadı'}), 400
+    # Dosya kaynağını belirle (JSON Base64 veya Multipart Form)
+    file = None
+    
+    if request.is_json:
+        data = request.get_json()
+        if 'file_content' in data:
+            import base64
+            import io
+            try:
+                # Base64 decode
+                file_bytes = base64.b64decode(data['file_content'])
+                
+                # Clean CSV quotes if present
+                try:
+                    content_str = file_bytes.decode('utf-8')
+                    lines = content_str.splitlines()
+                    cleaned_lines = []
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith('"') and line.endswith('"'):
+                            line = line[1:-1]
+                        cleaned_lines.append(line)
+                    cleaned_content = "\n".join(cleaned_lines)
+                    file = io.BytesIO(cleaned_content.encode('utf-8'))
+                except Exception as e:
+                    print(f"CSV cleaning failed, using raw bytes: {e}")
+                    file = io.BytesIO(file_bytes)
 
-    file = request.files['file']
+                file.filename = data.get('filename', 'uploaded.csv')
+            except Exception as e:
+                return jsonify({'error': f'Base64 decode hatası: {str(e)}'}), 400
+
+    if file is None:
+        if 'file' not in request.files:
+            return jsonify({'error': 'Dosya bulunamadı'}), 400
+        file = request.files['file']
 
     if file.filename == '':
         return jsonify({'error': 'Dosya seçilmedi'}), 400
 
-    if not file.filename.endswith('.csv'):
-        return jsonify({'error': 'Sadece CSV dosyaları kabul edilir'}), 400
+    allowed_extensions = {'.csv', '.txt', '.log'}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        return jsonify({'error': 'Sadece CSV, TXT ve LOG dosyaları kabul edilir'}), 400
 
     try:
         # CSV'yi doğrudan oku (kaydetmeden)
@@ -142,18 +177,49 @@ def upload_and_analyze():
         print(f"📊 CSV okundu: {len(data)} satır")
         print(f"Kolonlar: {list(data.columns)}")
 
-        # Kategorik kolonları encode et
-        from sklearn.preprocessing import LabelEncoder
-        categorical_cols = ["proto", "service", "state"]
-        le = LabelEncoder()
-
+        # Kategorik kolonları encode et (Save edilmiş encoder'ları kullan)
+        categorical_cols = ["proto", "service", "state", "attack_cat"]
+        le_dict = None
+        
+        # Encoderları yükle
+        ENCODER_PATH = 'encoders.pkl'
+        if os.path.exists(ENCODER_PATH):
+            with open(ENCODER_PATH, 'rb') as f:
+                le_dict = pickle.load(f)
+                print("✅ Encoderlar yüklendi")
+        
         for col in categorical_cols:
-            if col in data.columns:
-                data[col] = le.fit_transform(data[col].astype(str))
-                print(f"✓ {col} encode edildi")
+            if col in data.columns and col != 'attack_cat': # attack_cat label, feature değil
+                data[col] = data[col].astype(str)
+                
+                if le_dict and col in le_dict:
+                    le = le_dict[col]
+                    # Bilinmeyen değerleri 'unknown' yap (veya en sık tekrar edene ata)
+                    known_classes = set(le.classes_)
+                    # Eğer 'unknown' class'ı varsa ona ata, yoksa class[0]'a ata
+                    fallback_value = 'unknown' if 'unknown' in known_classes else le.classes_[0]
+                    
+                    data[col] = data[col].apply(lambda x: x if x in known_classes else fallback_value)
+                    data[col] = le.transform(data[col])
+                    print(f"✓ {col} encoded with saved encoder")
+                else:
+                    # Fallback: Eğer encoder yoksa yenisini oluştur (Eski yöntem - Riskli)
+                    from sklearn.preprocessing import LabelEncoder
+                    le = LabelEncoder()
+                    data[col] = le.fit_transform(data[col])
+                    print(f"⚠️ {col} encoded with NEW encoder (saved encoder not found)")
 
         # Feature'ları hazırla
         X = data.drop(columns=["label", "attack_cat"], errors='ignore')
+
+        if hasattr(model, 'feature_names_in_'):
+            expected_cols = model.feature_names_in_
+            # Eksik kolonlar varsa 0 ekle, fazla varsa at
+            for col in expected_cols:
+                if col not in X.columns:
+                    X[col] = 0
+            # Sadece modelin bildiği kolonları, doğru sırada seç
+            X = X[expected_cols]
 
         print(f"🔍 Tahmin yapılıyor: {len(X)} kayıt")
 
@@ -207,6 +273,21 @@ def upload_and_analyze():
 
         db.session.commit()
 
+        # Saldırıları listeye çevir
+        attacks_list = []
+        for idx, row in attacks_df.iterrows():
+            attack = {
+                'type': row.get('attack_cat', 'Attack'),
+                'severity': 'HIGH' if row['probability'] > 0.8 else 'MEDIUM',
+                'description': f"Detected {row.get('attack_cat', 'attack')} traffic",
+                'sourceIP': str(row.get('srcip', 'N/A')),
+                'targetIP': str(row.get('dstip', 'N/A')),
+                'port': int(row.get('dsport', 0)) if pd.notna(row.get('dsport')) else None,
+                'confidence': float(row['probability']),
+                'rawLog': str(row.to_dict())
+            }
+            attacks_list.append(attack)
+
         return jsonify({
             'success': True,
             'job_id': job_id,
@@ -216,11 +297,21 @@ def upload_and_analyze():
                 'attacks_detected': attacks_detected,
                 'normal_traffic': normal_traffic,
                 'attack_percentage': attack_percentage
-            }
+            },
+            'attacks': attacks_list  # Frontend için gerekli
         })
 
     except Exception as e:
-        print(f"❌ HATA: {e}")
+        error_msg = f"❌ HATA: {e}"
+        print(error_msg)
+        
+        # Log to file
+        with open("backend_error.log", "a", encoding="utf-8") as f:
+            f.write(f"\n[{datetime.utcnow()}] ERROR in upload_and_analyze:\n")
+            f.write(str(e) + "\n")
+            import traceback
+            traceback.print_exc(file=f)
+            
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500

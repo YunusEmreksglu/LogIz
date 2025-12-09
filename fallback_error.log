@@ -1,0 +1,14 @@
+[2025-12-09T14:29:08.993Z] Analysis Fallback Error: Failed to analyze log file
+[2025-12-09T14:32:47.189Z] Analysis Fallback Error: Failed to analyze log file
+[2025-12-09T14:33:35.029Z] Analysis Fallback Error: Failed to analyze log file
+[2025-12-09T14:34:34.431Z] Analysis Fallback Error: Failed to analyze log file
+[2025-12-09T14:42:11.251Z] Analysis Fallback Error: Failed to analyze log file
+[2025-12-09T14:43:13.922Z] Analysis Fallback Error: fetch failed
+[2025-12-09T14:48:06.349Z] Analysis Fallback Error: fetch failed
+[2025-12-09T14:53:27.343Z] Analysis Fallback Error: fetch failed
+[2025-12-09T15:16:02.543Z] Analysis Fallback Error: Error
+[2025-12-09T15:16:32.363Z] Analysis Fallback Error: Error
+[2025-12-09T15:22:12.012Z] Analysis Fallback Error: Error
+[2025-12-09T15:22:56.190Z] Analysis Fallback Error: Error
+[2025-12-09T16:00:51.025Z] Analysis Fallback Error: connect ECONNREFUSED 127.0.0.1:5000
+[2025-12-09T16:01:35.889Z] Analysis Fallback Error: connect ECONNREFUSED 127.0.0.1:5000

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, File, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { cn, formatBytes } from '@/lib/utils'
@@ -11,8 +11,8 @@ interface FileUploadProps {
   acceptedTypes?: string[]
 }
 
-export default function FileUpload({ 
-  onUpload, 
+export default function FileUpload({
+  onUpload,
   maxSize = 50 * 1024 * 1024, // 50MB
   acceptedTypes = ['.log', '.txt', '.csv', '.json']
 }: FileUploadProps) {
@@ -22,19 +22,45 @@ export default function FileUpload({
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [error, setError] = useState<string>('')
 
+  // Progress simulation effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+
+    if (status === 'uploading') {
+      interval = setInterval(() => {
+        setProgress(prev => {
+          // Slow down near the end
+          if (prev >= 95) return prev
+          // Random increment between 5 and 15
+          const diff = Math.floor(Math.random() * 10) + 5
+          return Math.min(prev + diff, 95)
+        })
+      }, 300)
+    } else if (status === 'idle') {
+      setProgress(0)
+    } else if (status === 'success') {
+      setProgress(100)
+    }
+
+    return () => clearInterval(interval)
+  }, [status])
+
+
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const selectedFile = acceptedFiles[0]
-      
+
       if (selectedFile.size > maxSize) {
         setError(`File size exceeds ${formatBytes(maxSize)}`)
         setStatus('error')
         return
       }
-      
+
       setFile(selectedFile)
       setStatus('idle')
       setError('')
+      setProgress(0)
     }
   }, [maxSize])
 
@@ -42,7 +68,10 @@ export default function FileUpload({
     onDrop,
     multiple: false,
     accept: {
-      'text/plain': acceptedTypes
+      'text/plain': ['.txt', '.log'],
+      'text/csv': ['.csv'],
+      'application/json': ['.json'],
+      'application/vnd.ms-excel': ['.csv'] // Windows CSV MIME type fix
     }
   })
 
@@ -51,26 +80,16 @@ export default function FileUpload({
 
     setUploading(true)
     setStatus('uploading')
-    setProgress(0)
+    setProgress(0) // Start at 0, effect will take over
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return prev
-          }
-          return prev + 10
-        })
-      }, 200)
+      // Small delay just to show "0%" state briefly if needed, 
+      // but useEffect will start updating soon.
 
       await onUpload(file)
 
-      clearInterval(progressInterval)
-      setProgress(100)
       setStatus('success')
-      
+
       setTimeout(() => {
         setFile(null)
         setStatus('idle')
@@ -79,10 +98,21 @@ export default function FileUpload({
     } catch (err) {
       setStatus('error')
       setError(err instanceof Error ? err.message : 'Upload failed')
-    } finally {
       setUploading(false)
+    } finally {
+      // Don't set uploading false immediately on success so success state persists briefly
+      if (status !== 'success') {
+        setUploading(false)
+      }
     }
   }
+
+  // Auto-upload effect when file is selected
+  useEffect(() => {
+    if (file && status === 'idle') {
+      handleUpload()
+    }
+  }, [file, status])
 
   const removeFile = () => {
     setFile(null)
@@ -98,8 +128,8 @@ export default function FileUpload({
         {...getRootProps()}
         className={cn(
           "relative border-2 border-dashed rounded-xl p-12 transition-all duration-300 cursor-pointer",
-          isDragActive 
-            ? "border-cyber-blue bg-cyber-blue/10" 
+          isDragActive
+            ? "border-cyber-blue bg-cyber-blue/10"
             : "border-gray-700 hover:border-cyber-blue/50 bg-gray-900/50",
           file && "pointer-events-none opacity-50"
         )}
@@ -136,7 +166,7 @@ export default function FileUpload({
                 <p className="text-xs text-gray-400">{formatBytes(file.size)}</p>
               </div>
             </div>
-            
+
             {status === 'idle' && (
               <button
                 onClick={removeFile}
@@ -145,11 +175,11 @@ export default function FileUpload({
                 <X className="w-4 h-4" />
               </button>
             )}
-            
+
             {status === 'success' && (
               <CheckCircle className="w-5 h-5 text-cyber-green flex-shrink-0" />
             )}
-            
+
             {status === 'error' && (
               <AlertCircle className="w-5 h-5 text-cyber-red flex-shrink-0" />
             )}

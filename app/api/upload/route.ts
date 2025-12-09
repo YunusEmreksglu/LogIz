@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile } from 'fs/promises'
+import { writeFile, mkdir, appendFile } from 'fs/promises'
 import { join } from 'path'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -47,13 +47,16 @@ export async function POST(request: NextRequest) {
       ? join(process.cwd(), process.env.UPLOAD_DIR)
       : join(process.cwd(), 'public', 'uploads')
 
+    // Ensure uploads directory exists
+    await mkdir(uploadDir, { recursive: true })
+
     const filePath = join(uploadDir, filename)
 
     await writeFile(filePath, buffer)
 
     // Get userId from session (if logged in)
     const session = await getServerSession(authOptions)
-    const userId = session?.user?.id || `guest-${timestamp}`
+    const userId = session?.user?.id || undefined // Allow null/undefined for anonymous uploads
 
     const logFile = await prisma.logFile.create({
       data: {
@@ -75,10 +78,18 @@ export async function POST(request: NextRequest) {
         size: logFile.fileSize,
       },
     })
-  } catch (error) {
-    console.error('Upload error:', error)
+  } catch (error: any) {
+    const errorMsg = `[${new Date().toISOString()}] Upload Error: ${error.message}\nStack: ${error.stack}\n`
+    console.error(errorMsg)
+
+    try {
+      await appendFile(join(process.cwd(), 'upload_error.log'), errorMsg)
+    } catch (logErr) {
+      console.error('Failed to write error log:', logErr)
+    }
+
     return NextResponse.json(
-      { error: 'Failed to upload file' },
+      { error: 'Failed to upload file', details: error.message },
       { status: 500 }
     )
   }

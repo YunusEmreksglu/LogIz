@@ -37,9 +37,10 @@ export default function HistoryPage() {
     try {
       const response = await fetch('/api/logs')
       const data = await response.json()
-      setLogs(data.logFiles)
+      setLogs(data.logFiles || [])
     } catch (error) {
       console.error('Failed to fetch logs:', error)
+      setLogs([])
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { readFile } from "fs/promises";
+import { readFile, appendFile } from "fs/promises";
 import { join } from "path";
 import { prisma } from "@/lib/prisma";
 import { mockAnalyzeLog, analyzeLogWithPython } from "@/lib/python-api";
@@ -31,7 +31,13 @@ export async function POST(request: NextRequest) {
         filename: logFile.originalName,
         fileType: logFile.fileType,
       });
-    } catch (error) {
+    } catch (error: any) {
+      const fallbackError = `[${new Date().toISOString()}] Analysis Fallback Error: ${error.message}\n`
+      console.error(fallbackError)
+      try {
+        await appendFile(join(process.cwd(), 'fallback_error.log'), fallbackError)
+      } catch (e) { console.error(e) }
+
       analysisResult = await mockAnalyzeLog({
         logContent: fileContent,
         filename: logFile.originalName,
@@ -40,82 +46,116 @@ export async function POST(request: NextRequest) {
     }
 
     const processingTime = Date.now() - startTime;
+    let savedAnalysis = null;
+    let savedThreats = [];
 
-    const analysis = await prisma.analysis.create({
-      data: {
-        logFileId,
-        result: analysisResult,
-        threatCount: analysisResult.threatCount,
-        highSeverity: analysisResult.summary.critical + analysisResult.summary.high,
-        mediumSeverity: analysisResult.summary.medium,
-        lowSeverity: analysisResult.summary.low,
-        status: "COMPLETED",
-        processingTime,
-      },
-    });
-
-    const threats = await Promise.all(
-      analysisResult.threats.map((threat: any) => {
-        // Geolocate IP
-        let geoInfo = null
-        if (threat.sourceIP && threat.sourceIP !== 'N/A') {
-          const geo = require('geoip-lite')
-          geoInfo = geo.lookup(threat.sourceIP)
-        }
-
-        return prisma.threat.create({
-          data: {
-            analysisId: analysis.id,
-            type: threat.type,
-            severity: threat.severity,
-            description: threat.description,
-            sourceIP: threat.sourceIP,
-            targetIP: threat.targetIP,
-            port: threat.port,
-            timestamp: threat.timestamp ? new Date(threat.timestamp) : null,
-            rawLog: threat.rawLog,
-            confidence: threat.confidence,
-            // Geolocation data
-            sourceLat: geoInfo?.ll?.[0] || null,
-            sourceLon: geoInfo?.ll?.[1] || null,
-            sourceCountry: geoInfo?.country || null,
-          },
-        })
-      })
-    );
-
-    await prisma.logFile.update({ where: { id: logFileId }, data: { status: "COMPLETED" } });
-
-    // Send notifications for critical threats
+    // Veritabanına kaydetme işlemi (Opsiyonel - Hata olursa analizi engellememeli)
     try {
-      const criticalThreats = analysisResult.threats.filter((t: any) => t.severity === 'CRITICAL')
-      if (criticalThreats.length > 0) {
-        const { sendNotifications } = await import('@/lib/notifications')
+      const analysis = await prisma.analysis.create({
+        data: {
+          logFileId,
+          result: analysisResult,
+          threatCount: analysisResult.threatCount,
+          highSeverity: analysisResult.summary.critical + analysisResult.summary.high,
+          mediumSeverity: analysisResult.summary.medium,
+          lowSeverity: analysisResult.summary.low,
+          status: "COMPLETED",
+          processingTime,
+        },
+      });
+      savedAnalysis = analysis;
 
-        // Get user email if available
-        const user = await prisma.user.findUnique({ where: { id: logFile.userId } })
+      const threats = await Promise.all(
+        analysisResult.threats.map((threat: any) => {
+          // Geolocate IP
+          let geoInfo = null
+          if (threat.sourceIP && threat.sourceIP !== 'N/A') {
+            try {
+              const geo = require('geoip-lite')
+              geoInfo = geo.lookup(threat.sourceIP)
+            } catch (e) {
+              console.warn('GeoIP lookup failed:', e)
+            }
+          }
 
-        await sendNotifications(analysis.id, analysisResult.threats, {
-          email: user?.email ? { to: user.email } : undefined,
-          slack: process.env.SLACK_WEBHOOK_URL ? { webhookUrl: process.env.SLACK_WEBHOOK_URL } : undefined
+          return prisma.threat.create({
+            data: {
+              analysisId: analysis.id,
+              type: threat.type,
+              severity: threat.severity,
+              description: threat.description,
+              sourceIP: threat.sourceIP,
+              targetIP: threat.targetIP,
+              port: threat.port,
+              timestamp: threat.timestamp ? new Date(threat.timestamp) : null,
+              rawLog: threat.rawLog,
+              confidence: threat.confidence,
+              // Geolocation data
+              sourceLat: geoInfo?.ll?.[0] || null,
+              sourceLon: geoInfo?.ll?.[1] || null,
+              sourceCountry: geoInfo?.country || null,
+            },
+          })
         })
+      );
+      savedThreats = threats;
+
+      await prisma.logFile.update({ where: { id: logFileId }, data: { status: "COMPLETED" } });
+
+      // Send notifications for critical threats
+      try {
+        const criticalThreats = analysisResult.threats.filter((t: any) => t.severity === 'CRITICAL')
+        if (criticalThreats.length > 0) {
+          const { sendNotifications } = await import('@/lib/notifications')
+
+          // Get user email if available
+          const user = await prisma.user.findUnique({ where: { id: logFile.userId } })
+
+          await sendNotifications(analysis.id, analysisResult.threats, {
+            email: user?.email ? { to: user.email } : undefined,
+            slack: process.env.SLACK_WEBHOOK_URL ? { webhookUrl: process.env.SLACK_WEBHOOK_URL } : undefined
+          })
+        }
+      } catch (notifError) {
+        console.error('Notification error:', notifError)
       }
-    } catch (notifError) {
-      console.error('Notification error:', notifError)
-      // Don't fail the request if notifications fail
+
+    } catch (dbError: any) {
+      console.error("Database save failed:", dbError);
+      const dbErrorMsg = `[${new Date().toISOString()}] Database Save Error: ${dbError.message}\n`
+      try {
+        await appendFile(join(process.cwd(), 'database_error.log'), dbErrorMsg)
+      } catch (e) { }
+
+      // Veritabanı hatası olsa bile kullanıcıya sonucu göster
+      // Frontend için geçici ID ve yapı oluştur
+      savedAnalysis = {
+        id: 'temp-' + Date.now(),
+        threatCount: analysisResult.threatCount,
+        processingTime,
+      };
+      savedThreats = analysisResult.threats;
     }
 
     return NextResponse.json({
       success: true,
       analysis: {
-        id: analysis.id,
-        threatCount: analysis.threatCount,
-        processingTime: analysis.processingTime,
-        threats,
+        id: savedAnalysis?.id,
+        threatCount: savedAnalysis?.threatCount || analysisResult.threatCount,
+        processingTime: savedAnalysis?.processingTime || processingTime,
+        threats: savedThreats.length > 0 ? savedThreats : analysisResult.threats,
+        savedToDb: !!savedAnalysis?.id && !savedAnalysis.id.toString().startsWith('temp-')
       },
     });
-  } catch (error) {
-    console.error("Analysis error:", error);
-    return NextResponse.json({ error: "Failed to analyze log file" }, { status: 500 });
+  } catch (error: any) {
+    const errorMsg = `[${new Date().toISOString()}] Analysis Route Error: ${error.message}\nStack: ${error.stack}\n`;
+    console.error(errorMsg);
+    try {
+      await appendFile(join(process.cwd(), 'analysis_error.log'), errorMsg);
+    } catch (logErr) {
+      console.error('Failed to write analysis log:', logErr);
+    }
+
+    return NextResponse.json({ error: "Failed to analyze log file", details: error.message }, { status: 500 });
   }
 }

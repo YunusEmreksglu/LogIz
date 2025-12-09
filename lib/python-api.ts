@@ -1,3 +1,4 @@
+// Forces HMR rebuild
 import axios from 'axios'
 
 export interface AnalysisRequest {
@@ -33,36 +34,66 @@ export interface AnalysisResponse {
   error?: string
 }
 
-const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000'
+const PYTHON_API_URL = 'http://127.0.0.1:5000/api' // Hardcoded for reliability
 const PYTHON_API_KEY = process.env.PYTHON_API_KEY
 
 export async function analyzeLogWithPython(data: AnalysisRequest): Promise<AnalysisResponse> {
   try {
+    // Convert to Base64 for reliable JSON upload
+    const buffer = Buffer.from(data.logContent)
+    const base64Content = buffer.toString('base64')
+
     const response = await axios.post(
-      `${PYTHON_API_URL}/analyze`,
+      `${PYTHON_API_URL}/analyze/upload`,
       {
-        log_content: data.logContent,
-        filename: data.filename,
-        file_type: data.fileType
+        file_content: base64Content,
+        filename: data.filename
       },
       {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${PYTHON_API_KEY}`,
         },
-        timeout: 300000, // 5 minutes timeout
+        timeout: 300000, // 5 minutes
       }
     )
 
-    return response.data
-  } catch (error) {
-    console.error('Python API Error:', error)
-    
-    if (axios.isAxiosError(error)) {
-      throw new Error(error.response?.data?.message || 'Failed to analyze log file')
+    const result = response.data
+
+    if (result.success) {
+      const threats = result.attacks.map((attack: any) => ({
+        type: attack.type,
+        severity: attack.severity,
+        description: attack.description,
+        sourceIP: attack.sourceIP,
+        targetIP: attack.targetIP,
+        port: attack.port,
+        confidence: attack.confidence,
+        rawLog: attack.rawLog
+      }))
+
+      // Calculate summary
+      const summary = {
+        critical: threats.filter((t: any) => t.severity === 'CRITICAL').length,
+        high: threats.filter((t: any) => t.severity === 'HIGH').length,
+        medium: threats.filter((t: any) => t.severity === 'MEDIUM').length,
+        low: threats.filter((t: any) => t.severity === 'LOW').length,
+        info: threats.filter((t: any) => t.severity === 'INFO').length,
+      }
+
+      return {
+        success: true,
+        threatCount: result.results.attacks_detected,
+        threats: threats,
+        summary: summary,
+        processingTime: 0 // Backend doesn't return time yet, negligible
+      }
     }
-    
-    throw new Error('Unexpected error during log analysis')
+
+    return response.data
+  } catch (error: any) {
+    console.error('Python API Error:', error)
+    throw new Error(error.message || 'Unexpected error during log analysis')
   }
 }
 
