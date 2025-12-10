@@ -42,10 +42,11 @@ model LogFile {
   fileType      String
   status        FileStatus  @default(PENDING)
   uploadedAt    DateTime    @default(now())
-  
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  // DÜZELTİLEN KISIM:
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   analyses      Analysis[]
   
   @@map("log_files")
@@ -62,18 +63,18 @@ enum FileStatus {
 
 model Analysis {
   id              String          @id @default(cuid())
-  result          Json            // Python API response
+  result          Json
   threatCount     Int             @default(0)
   highSeverity    Int             @default(0)
   mediumSeverity  Int             @default(0)
   lowSeverity     Int             @default(0)
   status          AnalysisStatus  @default(PENDING)
   analyzedAt      DateTime        @default(now())
-  processingTime  Int?            // milliseconds
-  
+  processingTime  Int?
+
   logFileId       String
   logFile         LogFile         @relation(fields: [logFileId], references: [id], onDelete: Cascade)
-  
+
   threats         Threat[]
   
   @@map("analyses")
@@ -90,7 +91,7 @@ enum AnalysisStatus {
 
 model Threat {
   id          String        @id @default(cuid())
-  type        String        // SQL_INJECTION, XSS, BRUTE_FORCE, etc.
+  type        String
   severity    ThreatLevel
   description String
   sourceIP    String?
@@ -98,16 +99,15 @@ model Threat {
   port        Int?
   timestamp   DateTime?
   rawLog      String?
-  confidence  Float?        // 0-1 score from AI model
-  
-  // Geolocation
-  sourceLat   Float?
-  sourceLon   Float?
-  sourceCountry String?
-  
+  confidence  Float?
+
+  sourceLat      Float?
+  sourceLon      Float?
+  sourceCountry  String?
+
   analysisId  String
   analysis    Analysis      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-  
+
   @@map("threats")
   @@index([analysisId])
   @@index([severity])
@@ -130,10 +130,18 @@ model ApiKey {
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
-  
+
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("api_keys")
   @@index([userId])
+}
+
+model LiveLog {
+  id        String   @id @default(cuid())
+  message   String
+  source    String?
+  ip        String?
+  timestamp DateTime @default(now())
 }
