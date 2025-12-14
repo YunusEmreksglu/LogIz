@@ -1,0 +1,79 @@
+# ============================================
+# LogIz - Docker Compose Configuration
+# Services: nextjs, python-api, postgres
+# ============================================
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: logiz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: logiz
+      POSTGRES_PASSWORD: logiz123
+      POSTGRES_DB: logiz
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U logiz -d logiz" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Python ML API
+  python-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: logiz-python-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://logiz:logiz123@postgres:5432/logiz
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Next.js Frontend
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - DATABASE_URL=postgresql://logiz:logiz123@postgres:5432/logiz
+    container_name: logiz-nextjs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://logiz:logiz123@postgres:5432/logiz
+      - DIRECT_URL=postgresql://logiz:logiz123@postgres:5432/logiz
+      - PYTHON_API_URL=http://python-api:5000
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=docker-secret-key-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python-api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+
+
+networks:
+  default:
+    name: logiz-network

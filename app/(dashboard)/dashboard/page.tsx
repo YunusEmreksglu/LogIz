@@ -1,47 +1,34 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import StatsCard from '@/components/StatsCard'
-import ThreatCard from '@/components/ThreatCard'
-import { FileText, AlertTriangle, Shield, Activity, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { FileText, ShieldAlert, Activity, ShieldCheck } from 'lucide-react'
 import { DashboardStats, Threat } from '@/types'
 
+// Dashboard Components
+import {
+  GradientStatCard,
+  RecentThreatsTable,
+  PageHeader,
+  TrafficTrendChart,
+  ThreatDonutChart
+} from '@/components/dashboard'
+
+// Charts
 import ThreatsOverTimeChart from '@/components/charts/ThreatsOverTimeChart'
-import ThreatDistributionChart from '@/components/charts/ThreatDistributionChart'
 import SeverityHeatmap from '@/components/charts/SeverityHeatmap'
 
+// Dynamic import for map (SSR disabled)
 const ThreatMap = dynamic(() => import('@/components/ThreatMap'), {
   ssr: false,
   loading: () => <div className="h-[400px] w-full bg-gray-900/50 rounded-xl animate-pulse" />
 })
 
-// Extend DashboardStats interface locally if needed, or assume it's updated in types
 interface ExtendedDashboardStats extends DashboardStats {
   recentThreats?: Threat[]
   systemHealth?: number
   threatsDetected?: number
   activeThreats?: number
-}
-
-// Helper component for StatCard to match previous usage or new usage
-function StatCard({ title, value, icon: Icon, trend, color, className }: any) {
-  return (
-    <div className={`bg-gray-900/50 backdrop-blur-sm p-6 rounded-xl border border-gray-700 ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-3 rounded-lg bg-${color}-500/10`}>
-          <Icon className={`w-6 h-6 text-${color}-500`} />
-        </div>
-        {trend && (
-          <span className={`text-sm font-medium ${trend.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
-            {trend}
-          </span>
-        )}
-      </div>
-      <h3 className="text-gray-400 text-sm font-medium">{title}</h3>
-      <p className="text-2xl font-bold text-white mt-1">{value}</p>
-    </div>
-  )
 }
 
 export default function DashboardPage() {
@@ -59,110 +46,125 @@ export default function DashboardPage() {
     activeThreats: 0
   })
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    fetchStats()
-  }, [])
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await fetch('/api/stats')
       const data = await response.json()
 
-      // Map API response to expected stats format if needed
-      // For now assuming API returns compatible structure or we use defaults
       setStats({
         ...data,
         threatsDetected: data.totalThreats || 0,
         activeThreats: data.activeThreats || 0,
-        systemHealth: 98, // Mock health
+        systemHealth: 98,
         recentThreats: data.recentThreats || []
       })
     } catch (error) {
       console.error('Failed to fetch stats:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
+  }, [])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    fetchStats()
   }
 
+  // Transform threats for the table
+  const tableThreats = (stats.recentThreats || []).map((threat, index) => ({
+    id: threat.id || `threat-${index}`,
+    timestamp: threat.detectedAt || new Date().toISOString(),
+    sourceIP: threat.sourceIP || '—',
+    destinationIP: threat.destinationIP || '—',
+    type: threat.type || 'Unknown',
+    severity: threat.severity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO',
+    action: threat.severity === 'CRITICAL' || threat.severity === 'HIGH' ? 'Block' : 'Passthrough'
+  }))
+
   return (
-    <div className="p-8 space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Security Overview</h1>
-        <p className="text-gray-400">Real-time threat monitoring and analysis</p>
-      </div>
+    <div className="p-8 space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        title="Dashboard"
+        subtitle="Real-time network traffic and security overview"
+        isLive={true}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
 
-      {/* Stats Grid */}
+      {/* Stats Grid - 4 Gradient Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Total Logs Analyzed"
-          value={stats.totalLogs}
+        <GradientStatCard
+          title="Toplam Log (24s)"
+          value={stats.totalLogs || 0}
           icon={FileText}
-          trend="+12%"
-          color="blue"
+          gradient="blue"
+          badge={{ text: 'Gerçek zamanlı', type: 'info' }}
+          delay={0}
         />
-        <StatCard
-          title="Threats Detected"
-          value={stats.threatsDetected}
-          icon={ShieldAlert}
-          trend="+5%"
-          color="red"
-        />
-        <StatCard
-          title="Active Threats"
-          value={stats.activeThreats}
+        <GradientStatCard
+          title="Toplam Analiz"
+          value={stats.recentAnalyses || 0}
           icon={Activity}
-          trend="-2%"
-          color="orange"
+          gradient="purple"
+          subtitle="Son 7 gün"
+          delay={0.05}
         />
-        <StatCard
-          title="System Health"
-          value={`${stats.systemHealth}%`}
+        <GradientStatCard
+          title="Güvenlik Olayları"
+          value={stats.totalThreats || 0}
+          icon={ShieldAlert}
+          gradient="orange"
+          badge={stats.criticalThreats > 0 ? { text: 'Dikkat', type: 'warning' } : undefined}
+          delay={0.1}
+        />
+        <GradientStatCard
+          title="Kritik Tehditler"
+          value={stats.criticalThreats || 0}
           icon={ShieldCheck}
-          trend="+1%"
-          color="green"
+          gradient="red"
+          badge={stats.criticalThreats === 0 ? { text: 'Korumalı', type: 'success' } : { text: 'Kritik', type: 'danger' }}
+          delay={0.15}
         />
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Threats Over Time</h3>
-          <div className="h-[300px]">
-            <ThreatsOverTimeChart data={stats.threatsOverTime} />
-          </div>
+      {/* Charts Row - Traffic Trend + Donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <TrafficTrendChart title="Traffic Trend (24h)" />
         </div>
-
-        <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Threat Distribution</h3>
-          <div className="h-[300px]">
-            <ThreatDistributionChart data={stats.threatDistribution} />
-          </div>
-        </div>
+        <ThreatDonutChart title="Top Applications" />
       </div>
 
-      {/* Geo Map and Severity Heatmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gray-900/50 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Global Threat Map</h3>
-          <ThreatMap threats={stats.recentThreats || []} />
-        </div>
+      {/* Bottom Section - Tables */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Security Events */}
+        <RecentThreatsTable threats={tableThreats} maxItems={5} />
 
-        <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Severity Heatmap</h3>
-          <div className="h-[400px]">
-            <SeverityHeatmap data={stats.severityDistribution} />
-          </div>
-        </div>
+        {/* Threat Map */}
+        <ThreatMap threats={stats.recentThreats || []} />
+      </div>
+
+      {/* Additional Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ThreatsOverTimeChart data={stats.threatsOverTime} />
+        <SeverityHeatmap data={stats.severityDistribution} />
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <a
           href="/upload"
-          className="group p-6 rounded-xl bg-gradient-to-br from-cyber-blue/10 to-cyber-blue/5 border border-cyber-blue/20 hover:border-cyber-blue/50 transition-all duration-300"
+          className="group p-6 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/20 hover:border-cyan-500/50 transition-all duration-300"
         >
-          <FileText className="w-8 h-8 text-cyber-blue mb-3" />
+          <FileText className="w-8 h-8 text-cyan-400 mb-3" />
           <h3 className="text-lg font-semibold text-white mb-2">Upload New Log</h3>
           <p className="text-sm text-gray-400">
             Analyze a new log file for security threats
@@ -171,9 +173,9 @@ export default function DashboardPage() {
 
         <a
           href="/history"
-          className="group p-6 rounded-xl bg-gradient-to-br from-cyber-purple/10 to-cyber-purple/5 border border-cyber-purple/20 hover:border-cyber-purple/50 transition-all duration-300"
+          className="group p-6 rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20 hover:border-purple-500/50 transition-all duration-300"
         >
-          <Activity className="w-8 h-8 text-cyber-purple mb-3" />
+          <Activity className="w-8 h-8 text-purple-400 mb-3" />
           <h3 className="text-lg font-semibold text-white mb-2">View History</h3>
           <p className="text-sm text-gray-400">
             Browse previous analysis results

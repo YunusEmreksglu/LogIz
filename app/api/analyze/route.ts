@@ -2,7 +2,7 @@
 import { readFile, appendFile } from "fs/promises";
 import { join } from "path";
 import { prisma } from "@/lib/prisma";
-import { mockAnalyzeLog, analyzeLogWithPython } from "@/lib/python-api";
+import { analyzeLogWithPython } from "@/lib/python-api";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,17 +32,13 @@ export async function POST(request: NextRequest) {
         fileType: logFile.fileType,
       });
     } catch (error: any) {
-      const fallbackError = `[${new Date().toISOString()}] Analysis Fallback Error: ${error.message}\n`
-      console.error(fallbackError)
+      const errorMsg = `[${new Date().toISOString()}] Python Analysis Failed: ${error.message}\n`
+      console.error(errorMsg)
       try {
-        await appendFile(join(process.cwd(), 'fallback_error.log'), fallbackError)
+        await appendFile(join(process.cwd(), 'analysis_error.log'), errorMsg)
       } catch (e) { console.error(e) }
 
-      analysisResult = await mockAnalyzeLog({
-        logContent: fileContent,
-        filename: logFile.originalName,
-        fileType: logFile.fileType,
-      });
+      throw error // Re-throw to be caught by outer handler
     }
 
     const processingTime = Date.now() - startTime;
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest) {
       const analysis = await prisma.analysis.create({
         data: {
           logFileId,
-          result: analysisResult,
+          result: JSON.parse(JSON.stringify(analysisResult)) as any,
           threatCount: analysisResult.threatCount,
           highSeverity: analysisResult.summary.critical + analysisResult.summary.high,
           mediumSeverity: analysisResult.summary.medium,
@@ -109,7 +105,7 @@ export async function POST(request: NextRequest) {
           const { sendNotifications } = await import('@/lib/notifications')
 
           // Get user email if available
-          const user = await prisma.user.findUnique({ where: { id: logFile.userId } })
+          const user = logFile.userId ? await prisma.user.findUnique({ where: { id: logFile.userId } }) : null
 
           await sendNotifications(analysis.id, analysisResult.threats, {
             email: user?.email ? { to: user.email } : undefined,
@@ -144,7 +140,10 @@ export async function POST(request: NextRequest) {
         threatCount: savedAnalysis?.threatCount || analysisResult.threatCount,
         processingTime: savedAnalysis?.processingTime || processingTime,
         threats: savedThreats.length > 0 ? savedThreats : analysisResult.threats,
-        savedToDb: !!savedAnalysis?.id && !savedAnalysis.id.toString().startsWith('temp-')
+        savedToDb: !!savedAnalysis?.id && !savedAnalysis.id.toString().startsWith('temp-'),
+        // Pass through Python API's full classification data
+        severity_summary: (analysisResult as any).severity_summary || analysisResult.summary,
+        attack_type_distribution: (analysisResult as any).attack_type_distribution || {},
       },
     });
   } catch (error: any) {

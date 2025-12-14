@@ -38,9 +38,11 @@ export interface Threat {
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'
   description: string
   sourceIP?: string | null
+  destinationIP?: string | null
   targetIP?: string | null
   port?: number | null
   timestamp?: Date | null
+  detectedAt?: string | null
   rawLog?: string | null
   confidence?: number | null
   analysisId: string

@@ -5,25 +5,24 @@ import { authOptions } from '@/lib/auth'
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const userId = session.user.id
-
+    // Stats API - Tüm verileri getir (auth gerektirmez)
     // Get statistics
-    const [totalLogs, analyses] = await Promise.all([
-      prisma.logFile.count({ where: { userId } }),
+    const [totalLogs, analyses, recentThreats] = await Promise.all([
+      prisma.logFile.count(),
       prisma.analysis.findMany({
-        where: {
-          logFile: { userId },
-        },
         include: {
           threats: true,
         },
+        orderBy: { analyzedAt: 'desc' },
+        take: 100 // Son 100 analiz
       }),
+      prisma.threat.findMany({
+        orderBy: { timestamp: 'desc' },
+        take: 10, // Son 10 tehdit
+        include: {
+          analysis: true
+        }
+      })
     ])
 
     const totalThreats = analyses.reduce((sum, a) => sum + a.threatCount, 0)
@@ -38,7 +37,6 @@ export async function GET() {
 
     const recentAnalyses = await prisma.analysis.count({
       where: {
-        logFile: { userId },
         analyzedAt: {
           gte: sevenDaysAgo,
         },
@@ -60,12 +58,12 @@ export async function GET() {
 
     analyses.forEach(analysis => {
       analysis.threats.forEach(threat => {
-        // Time aggregation
-        if (threat.timestamp) {
-          const dateStr = new Date(threat.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          if (threatsOverTimeMap.has(dateStr)) {
-            threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + 1)
-          }
+        // Time aggregation - use threat timestamp or analysis date as fallback
+        const threatDate = threat.timestamp || analysis.analyzedAt
+        if (threatDate) {
+          const dateStr = new Date(threatDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          // Always add to count, even if not in last 7 days map (for current day)
+          threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + 1)
         }
 
         // Type aggregation
@@ -89,6 +87,17 @@ export async function GET() {
       threatsOverTime,
       threatDistribution,
       severityDistribution,
+      recentThreats: recentThreats.map(t => ({
+        id: t.id,
+        type: t.type,
+        severity: t.severity,
+        description: t.description,
+        sourceIP: t.sourceIP,
+        sourceLat: t.sourceLat,
+        sourceLon: t.sourceLon,
+        sourceCountry: t.sourceCountry,
+        detectedAt: t.timestamp?.toISOString() || new Date().toISOString()
+      }))
     })
   } catch (error) {
     console.error('Stats error:', error)

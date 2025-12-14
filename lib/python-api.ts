@@ -72,8 +72,14 @@ export async function analyzeLogWithPython(data: AnalysisRequest): Promise<Analy
         rawLog: attack.rawLog
       }))
 
-      // Calculate summary
-      const summary = {
+      // Use severity_summary from Python API (ALL threats, not just top 100)
+      const summary = result.severity_summary ? {
+        critical: result.severity_summary.CRITICAL || 0,
+        high: result.severity_summary.HIGH || 0,
+        medium: result.severity_summary.MEDIUM || 0,
+        low: result.severity_summary.LOW || 0,
+        info: result.severity_summary.INFO || 0,
+      } : {
         critical: threats.filter((t: any) => t.severity === 'CRITICAL').length,
         high: threats.filter((t: any) => t.severity === 'HIGH').length,
         medium: threats.filter((t: any) => t.severity === 'MEDIUM').length,
@@ -86,8 +92,11 @@ export async function analyzeLogWithPython(data: AnalysisRequest): Promise<Analy
         threatCount: result.results.attacks_detected,
         threats: threats,
         summary: summary,
-        processingTime: 0 // Backend doesn't return time yet, negligible
-      }
+        processingTime: (result.results.prediction_time_seconds || 0) * 1000,
+        // Pass through additional data from Python API
+        severity_summary: result.severity_summary,
+        attack_type_distribution: result.attack_type_distribution,
+      } as any
     }
 
     return response.data
@@ -98,49 +107,4 @@ export async function analyzeLogWithPython(data: AnalysisRequest): Promise<Analy
 }
 
 // Mock function for testing without Python API
-export async function mockAnalyzeLog(data: AnalysisRequest): Promise<AnalysisResponse> {
-  // Simulate processing time
-  await new Promise(resolve => setTimeout(resolve, 2000))
 
-  const mockThreats: ThreatDetection[] = [
-    {
-      type: 'SQL_INJECTION',
-      severity: 'CRITICAL',
-      description: 'SQL injection attempt detected in login form',
-      sourceIP: '192.168.1.100',
-      targetIP: '10.0.0.5',
-      port: 3306,
-      timestamp: new Date().toISOString(),
-      confidence: 0.95,
-      rawLog: "SELECT * FROM users WHERE username='admin' OR '1'='1"
-    },
-    {
-      type: 'BRUTE_FORCE',
-      severity: 'HIGH',
-      description: 'Multiple failed login attempts detected',
-      sourceIP: '203.0.113.45',
-      confidence: 0.87,
-    },
-    {
-      type: 'XSS',
-      severity: 'MEDIUM',
-      description: 'Cross-site scripting attempt in user input',
-      sourceIP: '198.51.100.78',
-      confidence: 0.72,
-    }
-  ]
-
-  return {
-    success: true,
-    threatCount: mockThreats.length,
-    threats: mockThreats,
-    summary: {
-      critical: 1,
-      high: 1,
-      medium: 1,
-      low: 0,
-      info: 0
-    },
-    processingTime: 2000
-  }
-}
