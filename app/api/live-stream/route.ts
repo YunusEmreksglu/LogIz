@@ -1,4 +1,5 @@
 // app/api/live-stream/route.ts
+import { randomUUID } from 'crypto';
 
 let clients: WritableStreamDefaultWriter<any>[] = [];
 
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   const { message, source, ip } = await req.json();
 
   const log = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     message,
     source,
     ip,

@@ -9,9 +9,26 @@ export default function LiveLogsPage() {
     const ev = new EventSource("/api/live-stream");
 
     ev.onmessage = (event) => {
-      if (event.data === "connected") return;
-      const log = JSON.parse(event.data);
-      setLogs((prev) => [log, ...prev].slice(0, 200));
+      if (event.data === "connected" || event.data === '"connected"') return;
+      try {
+        const log = JSON.parse(event.data);
+
+        // If log is just a string (e.g. "connected" parsed as json), ignore it or handle differently
+        if (typeof log !== 'object' || log === null) return;
+
+        // Ensure ID exists
+        if (!log.id) {
+          log.id = crypto.randomUUID ? crypto.randomUUID() : `log-${Date.now()}-${Math.random()}`;
+        }
+
+        setLogs((prev) => {
+          // Prevent duplicates
+          if (prev.some((l) => l.id === log.id)) return prev;
+          return [log, ...prev].slice(0, 200);
+        });
+      } catch (e) {
+        console.error("Failed to parse log", e);
+      }
     };
 
     return () => ev.close();

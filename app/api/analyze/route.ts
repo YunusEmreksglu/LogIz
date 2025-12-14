@@ -1,8 +1,8 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { prisma } from "@/lib/prisma";
-import { mockAnalyzeLog, analyzeLogWithPython } from "@/lib/python-api";
+import { supabase } from "@/lib/supabase";
+import { analyzeLog } from "@/lib/analysis-engine";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,12 +12,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Log file ID is required" }, { status: 400 });
     }
 
-    const logFile = await prisma.logFile.findUnique({ where: { id: logFileId } });
-    if (!logFile) {
+    const { data: logFile, error: fileError } = await supabase
+      .from('log_files')
+      .select('*')
+      .eq('id', logFileId)
+      .single();
+
+    if (fileError || !logFile) {
       return NextResponse.json({ error: "Log file not found" }, { status: 404 });
     }
 
-    await prisma.logFile.update({ where: { id: logFileId }, data: { status: "PROCESSING" } });
+    await supabase
+      .from('log_files')
+      .update({ status: "PROCESSING" })
+      .eq('id', logFileId);
 
     const filePath = join(process.cwd(), "public", logFile.filePath);
     const fileContent = await readFile(filePath, "utf-8");
@@ -26,23 +34,29 @@ export async function POST(request: NextRequest) {
     let analysisResult;
 
     try {
-      analysisResult = await analyzeLogWithPython({
+      // Use the new Pure TypeScript Analysis Engine
+      analysisResult = await analyzeLog({
         logContent: fileContent,
         filename: logFile.originalName,
         fileType: logFile.fileType,
       });
     } catch (error) {
-      analysisResult = await mockAnalyzeLog({
-        logContent: fileContent,
-        filename: logFile.originalName,
-        fileType: logFile.fileType,
-      });
+      console.error("Engine execution failed:", error);
+      analysisResult = {
+        success: false,
+        threatCount: 0,
+        threats: [],
+        summary: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        processingTime: 0,
+        error: "Analysis failed"
+      };
     }
 
     const processingTime = Date.now() - startTime;
 
-    const analysis = await prisma.analysis.create({
-      data: {
+    const { data: analysis, error: analysisError } = await supabase
+      .from('analyses')
+      .insert({
         logFileId,
         result: analysisResult,
         threatCount: analysisResult.threatCount,
@@ -51,11 +65,16 @@ export async function POST(request: NextRequest) {
         lowSeverity: analysisResult.summary.low,
         status: "COMPLETED",
         processingTime,
-      },
-    });
+      })
+      .select('id, threatCount, processingTime')
+      .single();
 
-    const threats = await Promise.all(
-      analysisResult.threats.map((threat: any) => {
+    if (analysisError || !analysis) {
+      throw analysisError || new Error("Failed to save analysis");
+    }
+
+    const threatInserts = await Promise.all(
+      analysisResult.threats.map(async (threat: any) => {
         // Geolocate IP
         let geoInfo = null
         if (threat.sourceIP && threat.sourceIP !== 'N/A') {
@@ -63,28 +82,39 @@ export async function POST(request: NextRequest) {
           geoInfo = geo.lookup(threat.sourceIP)
         }
 
-        return prisma.threat.create({
-          data: {
-            analysisId: analysis.id,
-            type: threat.type,
-            severity: threat.severity,
-            description: threat.description,
-            sourceIP: threat.sourceIP,
-            targetIP: threat.targetIP,
-            port: threat.port,
-            timestamp: threat.timestamp ? new Date(threat.timestamp) : null,
-            rawLog: threat.rawLog,
-            confidence: threat.confidence,
-            // Geolocation data
-            sourceLat: geoInfo?.ll?.[0] || null,
-            sourceLon: geoInfo?.ll?.[1] || null,
-            sourceCountry: geoInfo?.country || null,
-          },
-        })
+        return {
+          analysisId: analysis.id,
+          type: threat.type,
+          severity: threat.severity,
+          description: threat.description,
+          sourceIP: threat.sourceIP,
+          targetIP: threat.targetIP,
+          port: threat.port,
+          timestamp: threat.timestamp ? new Date(threat.timestamp).toISOString() : null,
+          rawLog: threat.rawLog,
+          confidence: threat.confidence,
+          // Geolocation data
+          sourceLat: geoInfo?.ll?.[0] || null,
+          sourceLon: geoInfo?.ll?.[1] || null,
+          sourceCountry: geoInfo?.country || null,
+        }
       })
     );
 
-    await prisma.logFile.update({ where: { id: logFileId }, data: { status: "COMPLETED" } });
+    const { data: threats, error: threatError } = await supabase
+      .from('threats')
+      .insert(threatInserts)
+      .select('*');
+
+    if (threatError) {
+      console.error("Threat insert error:", threatError);
+      // Continue even if logging threats fails, but log it.
+    }
+
+    await supabase
+      .from('log_files')
+      .update({ status: "COMPLETED" })
+      .eq('id', logFileId);
 
     // Send notifications for critical threats
     try {
@@ -93,10 +123,18 @@ export async function POST(request: NextRequest) {
         const { sendNotifications } = await import('@/lib/notifications')
 
         // Get user email if available
-        const user = await prisma.user.findUnique({ where: { id: logFile.userId } })
+        let userEmail = null;
+        if (logFile.userId) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', logFile.userId)
+            .single();
+          userEmail = userData?.email;
+        }
 
         await sendNotifications(analysis.id, analysisResult.threats, {
-          email: user?.email ? { to: user.email } : undefined,
+          email: userEmail ? { to: userEmail } : undefined,
           slack: process.env.SLACK_WEBHOOK_URL ? { webhookUrl: process.env.SLACK_WEBHOOK_URL } : undefined
         })
       }

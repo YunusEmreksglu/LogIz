@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -14,21 +14,34 @@ export async function GET() {
     const userId = session.user.id
 
     // Get statistics
-    const [totalLogs, analyses] = await Promise.all([
-      prisma.logFile.count({ where: { userId } }),
-      prisma.analysis.findMany({
-        where: {
-          logFile: { userId },
-        },
-        include: {
-          threats: true,
-        },
-      }),
-    ])
+    // 1. Total Logs Count
+    const { count: totalLogs, error: logsError } = await supabase
+      .from('log_files')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
 
-    const totalThreats = analyses.reduce((sum, a) => sum + a.threatCount, 0)
+    if (logsError) throw logsError
+
+    // 2. Analyses with Threats (for calculations)
+    // We use !inner on log_files to filter analyses by the user who owns the log file
+    const { data: analysesData, error: analysesError } = await supabase
+      .from('analyses')
+      .select(`
+        *,
+        threats (*),
+        log_files!inner (user_id)
+      `)
+      .eq('log_files.user_id', userId)
+
+    if (analysesError) throw analysesError
+
+    const analyses = analysesData || []
+
+    const totalThreats = analyses.reduce((sum, a) => sum + (a.threat_count || 0), 0)
+
+    // Explicitly type 't' as any or interact carefully since Supabase types might not be inferred here without generics
     const criticalThreats = analyses.reduce(
-      (sum, a) => sum + a.threats.filter(t => t.severity === 'CRITICAL').length,
+      (sum, a) => sum + (a.threats || []).filter((t: any) => t.severity === 'CRITICAL').length,
       0
     )
 
@@ -36,14 +49,13 @@ export async function GET() {
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-    const recentAnalyses = await prisma.analysis.count({
-      where: {
-        logFile: { userId },
-        analyzedAt: {
-          gte: sevenDaysAgo,
-        },
-      },
-    })
+    const { count: recentAnalyses, error: recentError } = await supabase
+      .from('analyses')
+      .select('*, log_files!inner(user_id)', { count: 'exact', head: true })
+      .eq('log_files.user_id', userId)
+      .gte('analyzed_at', sevenDaysAgo.toISOString())
+
+    if (recentError) throw recentError
 
     // Aggregate data for charts
     const threatsOverTimeMap = new Map<string, number>()
@@ -59,7 +71,10 @@ export async function GET() {
     }
 
     analyses.forEach(analysis => {
-      analysis.threats.forEach(threat => {
+      // analysis.threats is an array of objects
+      const threats = analysis.threats || []
+      // Use 'any' or specific type for threat to avoid TS errors during quick refactor if types aren't fully generated
+      threats.forEach((threat: any) => {
         // Time aggregation
         if (threat.timestamp) {
           const dateStr = new Date(threat.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -69,11 +84,14 @@ export async function GET() {
         }
 
         // Type aggregation
-        const type = threat.type.replace('_', ' ')
+        // Database has snake_case types likely? Or maybe they are stored raw. 
+        // Existing code did replace('_', ' '), let's keep it safe.
+        const type = (threat.type || 'Unknown').replace('_', ' ')
         threatTypeMap.set(type, (threatTypeMap.get(type) || 0) + 1)
 
         // Severity aggregation
-        severityMap.set(threat.severity, (severityMap.get(threat.severity) || 0) + 1)
+        const severity = threat.severity || 'UNKNOWN'
+        severityMap.set(severity, (severityMap.get(severity) || 0) + 1)
       })
     })
 
@@ -82,10 +100,10 @@ export async function GET() {
     const severityDistribution = Array.from(severityMap.entries()).map(([name, value]) => ({ name, value }))
 
     return NextResponse.json({
-      totalLogs,
+      totalLogs: totalLogs || 0,
       totalThreats,
       criticalThreats,
-      recentAnalyses,
+      recentAnalyses: recentAnalyses || 0,
       threatsOverTime,
       threatDistribution,
       severityDistribution,

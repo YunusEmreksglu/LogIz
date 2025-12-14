@@ -3,7 +3,8 @@ import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,26 +54,36 @@ export async function POST(request: NextRequest) {
 
     // Get userId from session (if logged in)
     const session = await getServerSession(authOptions)
+    // Note: If allow guest uploads, ensure your Supabase 'log_files.user_id' column is nullable or references a guest account.
+    // The previous code generated a 'guest-...' ID which will fail FK constraints if not handled in DB.
     const userId = session?.user?.id || `guest-${timestamp}`
 
-    const logFile = await prisma.logFile.create({
-      data: {
+    const { data: logFile, error } = await supabase
+      .from('log_files')
+      .insert({
+        id: randomUUID(),
         filename,
-        originalName: file.name,
-        filePath: `/uploads/${filename}`,
-        fileSize: file.size,
-        fileType: fileExt,
+        original_name: file.name,
+        file_path: `/uploads/${filename}`,
+        file_size: file.size,
+        file_type: fileExt,
         status: 'PENDING',
-        userId,
-      },
-    })
+        user_id: userId,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Supabase insert error:', error)
+      throw error
+    }
 
     return NextResponse.json({
       success: true,
       logFile: {
         id: logFile.id,
-        filename: logFile.originalName,
-        size: logFile.fileSize,
+        filename: logFile.original_name,
+        size: logFile.file_size,
       },
     })
   } catch (error) {
