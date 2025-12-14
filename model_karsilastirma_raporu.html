@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LogIz Model Karşılaştırma Raporu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 40px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            color: #00d9ff;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        h2 {
+            color: #00d9ff;
+            font-size: 1.5rem;
+            margin: 30px 0 15px 0;
+            border-bottom: 2px solid rgba(0, 217, 255, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            color: #ffd700;
+            font-size: 1.2rem;
+            margin: 25px 0 10px 0;
+        }
+        
+        .info-box {
+            background: rgba(0, 217, 255, 0.1);
+            border-left: 4px solid #00d9ff;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+        
+        .warning-box {
+            background: rgba(255, 107, 107, 0.1);
+            border-left: 4px solid #ff6b6b;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+        
+        .success-box {
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 4px solid #00ff88;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #00d9ff 0%, #0066ff 100%);
+            color: #fff;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        tr:hover {
+            background: rgba(0, 217, 255, 0.05);
+        }
+        
+        .winner {
+            background: rgba(0, 255, 136, 0.1) !important;
+        }
+        
+        .winner td:first-child::before {
+            content: "🏆 ";
+        }
+        
+        .model-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .model-card h4 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .pros-cons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .pros h5 {
+            color: #00ff88;
+            margin-bottom: 10px;
+        }
+        
+        .cons h5 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+        
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        li {
+            padding: 5px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .pros li::before {
+            content: "✓";
+            color: #00ff88;
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+        
+        .cons li::before {
+            content: "✗";
+            color: #ff6b6b;
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+        
+        .confusion-matrix {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 400px;
+            margin: 20px auto;
+        }
+        
+        .cm-cell {
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .cm-header {
+            background: rgba(0, 217, 255, 0.2);
+            color: #00d9ff;
+        }
+        
+        .cm-tn, .cm-tp {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+        
+        .cm-fp, .cm-fn {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+        }
+        
+        .conclusion {
+            background: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(0, 102, 255, 0.1) 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                color: black;
+                padding: 20px;
+            }
+            .container {
+                background: white;
+                box-shadow: none;
+                border: none;
+            }
+            h1, h2, h3 {
+                color: #0066ff;
+            }
+            table {
+                background: #f5f5f5;
+            }
+            th {
+                background: #0066ff;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 LogIz Model Karşılaştırma Raporu</h1>
+        <p class="subtitle">IDS (Intrusion Detection System) için Makine Öğrenmesi Model Analizi</p>
+        
+        <h2>📋 Genel Bakış</h2>
+        <div class="info-box">
+            <p><strong>Veri Seti:</strong> UNSW-NB15 (123.csv)</p>
+            <p><strong>Toplam Kayıt:</strong> 175,341</p>
+            <p><strong>Eğitim Seti:</strong> %80 (140,272 kayıt)</p>
+            <p><strong>Test Seti:</strong> %20 (35,069 kayıt)</p>
+        </div>
+        
+        <h2>🏆 Performans Karşılaştırması</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Accuracy</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1-Score</th>
+                    <th>Eğitim Süresi</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="winner">
+                    <td>XGBoost</td>
+                    <td><strong>99.41%</strong></td>
+                    <td>99.41%</td>
+                    <td>99.41%</td>
+                    <td>99.41%</td>
+                    <td>~15s</td>
+                </tr>
+                <tr>
+                    <td>🌲 Random Forest</td>
+                    <td><strong>99.27%</strong></td>
+                    <td>99.27%</td>
+                    <td>99.27%</td>
+                    <td>99.27%</td>
+                    <td>~30s</td>
+                </tr>
+                <tr>
+                    <td>🧠 Neural Network (MLP)</td>
+                    <td><strong>98.85%</strong></td>
+                    <td>98.86%</td>
+                    <td>98.85%</td>
+                    <td>98.85%</td>
+                    <td>~60s</td>
+                </tr>
+                <tr>
+                    <td>🔮 Keras/Deep Learning</td>
+                    <td><strong>94.03%</strong></td>
+                    <td>94.09%</td>
+                    <td>94.03%</td>
+                    <td>93.94%</td>
+                    <td>~140s</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="success-box">
+            <strong>🏆 EN İYİ MODEL: XGBoost (%99.41 Accuracy)</strong>
+        </div>
+        
+        <h2>🔍 Detaylı Model Analizi</h2>
+        
+        <div class="model-card">
+            <h4>🌲 Random Forest (Mevcut Model)</h4>
+            <p>Ensemble learning yöntemi kullanan, birden fazla karar ağacının oylamasıyla sonuç üreten model.</p>
+            <div class="pros-cons">
+                <div class="pros">
+                    <h5>Avantajları</h5>
+                    <ul>
+                        <li>Yüksek doğruluk (%99.27)</li>
+                        <li>Hızlı eğitim ve inference</li>
+                        <li>Yorumlanabilir</li>
+                        <li>Overfitting'e dayanıklı</li>
+                    </ul>
+                </div>
+                <div class="cons">
+                    <h5>Dezavantajları</h5>
+                    <ul>
+                        <li>Büyük model dosyası (~88MB)</li>
+                        <li>Yüksek bellek kullanımı</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="model-card">
+            <h4>🚀 XGBoost</h4>
+            <p>Gradient Boosting algoritmasının optimize edilmiş versiyonu, sıralı ağaç oluşturma yöntemi.</p>
+            <div class="pros-cons">
+                <div class="pros">
+                    <h5>Avantajları</h5>
+                    <ul>
+                        <li>En yüksek doğruluk (%99.41)</li>
+                        <li>GPU desteği</li>
+                        <li>Regularization ile overfitting kontrolü</li>
+                        <li>Hızlı eğitim</li>
+                    </ul>
+                </div>
+                <div class="cons">
+                    <h5>Dezavantajları</h5>
+                    <ul>
+                        <li>Hiperparametre ayarı karmaşık</li>
+                        <li>Sıralı eğitim (paralelleştirilemez)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="model-card">
+            <h4>🧠 Neural Network (MLP)</h4>
+            <p>Çok katmanlı algılayıcı (128-64-32 nöron), derin öğrenme yaklaşımı.</p>
+            <div class="pros-cons">
+                <div class="pros">
+                    <h5>Avantajları</h5>
+                    <ul>
+                        <li>Karmaşık desenleri öğrenebilir</li>
+                        <li>Ölçeklenebilir</li>
+                        <li>GPU ile hızlandırılabilir</li>
+                    </ul>
+                </div>
+                <div class="cons">
+                    <h5>Dezavantajları</h5>
+                    <ul>
+                        <li>Daha düşük doğruluk (%94-98)</li>
+                        <li>Veri normalizasyonu gerekli</li>
+                        <li>Yorumlanması zor</li>
+                        <li>Overfitting riski yüksek</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <h2>📊 Confusion Matrix (Random Forest)</h2>
+        <div class="confusion-matrix">
+            <div class="cm-cell"></div>
+            <div class="cm-cell cm-header">Normal</div>
+            <div class="cm-cell cm-header">Saldırı</div>
+            
+            <div class="cm-cell cm-header">Normal</div>
+            <div class="cm-cell cm-tn">11,016</div>
+            <div class="cm-cell cm-fp">184</div>
+            
+            <div class="cm-cell cm-header">Saldırı</div>
+            <div class="cm-cell cm-fn">73</div>
+            <div class="cm-cell cm-tp">23,796</div>
+        </div>
+        
+        <div class="warning-box">
+            <strong>⚠️ Önemli Bulgu:</strong> Keras/Deep Learning modeli (%94.03) beklenenden düşük performans gösterdi.
+            <ul style="margin-top: 10px; margin-left: 20px;">
+                <li>Early stopping çok erken devreye girdi</li>
+                <li>Tablo verisi için derin öğrenme optimal değil</li>
+                <li>Tree-based modeller bu veri tipi için üstün</li>
+            </ul>
+        </div>
+        
+        <div class="conclusion">
+            <h2>💡 Sonuç ve Öneriler</h2>
+            <p style="margin-bottom: 15px;">
+                Yapılandırılmış (tablo) veri için <strong>Tree-based modeller</strong> (Random Forest, XGBoost) 
+                derin öğrenmeden (Neural Network, Keras) üstündür.
+            </p>
+            
+            <table style="margin-top: 15px;">
+                <thead>
+                    <tr>
+                        <th>Senaryo</th>
+                        <th>Önerilen Model</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Production (Canlı Sistem)</td>
+                        <td>Random Forest veya XGBoost</td>
+                    </tr>
+                    <tr>
+                        <td>Maksimum Doğruluk</td>
+                        <td>XGBoost (%99.41)</td>
+                    </tr>
+                    <tr>
+                        <td>Hızlı Prototip</td>
+                        <td>Random Forest</td>
+                    </tr>
+                    <tr>
+                        <td>Kaynak Kısıtlı Ortam</td>
+                        <td>Random Forest</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>📅 Rapor Tarihi: 11 Aralık 2025</p>
+            <p>🔒 LogIz IDS - Model Karşılaştırma Analizi</p>
+        </div>
+    </div>
+</body>
+</html>

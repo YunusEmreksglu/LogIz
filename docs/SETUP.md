@@ -3,29 +3,27 @@
 ## 📋 Ön Gereksinimler
 
 - ✅ Node.js 18+ 
-- ✅ PostgreSQL 14+ (veya SQLite test için)
-- ⚠️ Python 3.8+ (AI API için - opsiyonel)
+- ✅ Supabase Hesabı
 
 ---
 
-## 🎯 Hızlı Başlangıç (Mock Modda)
+## 🎯 Hızlı Başlangıç
 
 ### 1️⃣ Bağımlılıkları Yükleyin
 ```powershell
 npm install
 ```
 
-### 2️⃣ Veritabanı Seçenekleri
+### 2️⃣ Veritabanı Yapılandırması (Supabase)
 
-#### Seçenek A: SQLite (En Hızlı - Test için)
-`.env.local` dosyasını düzenleyin:
-```env
-DATABASE_URL="file:./dev.db"
-```
+Projeniz Supabase ile çalışacak şekilde yapılandırılmıştır.
 
-#### Seçenek B: PostgreSQL (Production için önerilen)
+1. `.env` dosyasını açın.
+2. Supabase panelinden aldığınız bağlantı bilgilerini ekleyin:
+
 ```env
-DATABASE_URL="postgresql://postgres:password@localhost:5432/logiz_db"
+DATABASE_URL="postgresql://postgres.[project]:[password]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.[project]:[password]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
 ```
 
 ### 3️⃣ Prisma'yı Başlatın
@@ -119,14 +117,7 @@ npx prisma migrate dev --name init
 
 ## 🔧 Yaygın Sorunlar ve Çözümler
 
-### ❌ "Can't reach database server"
-```powershell
-# PostgreSQL çalışıyor mu kontrol edin
-pg_isready
 
-# Veya SQLite kullanın (daha kolay)
-DATABASE_URL="file:./dev.db"
-```
 
 ### ❌ "Module not found" hatası
 ```powershell
