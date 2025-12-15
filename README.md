@@ -235,7 +235,7 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 **Yunus Emre Keskin**
 
-- GitHub: [@YunusEmreksglu](https://github.com/YunusEmreksglu)
+- GitHub: [@Samet230](https://github.com/Samet230)
 
 ---
 
