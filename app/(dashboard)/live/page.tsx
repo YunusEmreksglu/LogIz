@@ -21,7 +21,8 @@ import {
     Terminal,
     X,
     Check,
-    Loader2
+    Loader2,
+    FileText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -89,6 +90,7 @@ export default function LiveMonitoringPage() {
 
     const logsContainerRef = useRef<HTMLDivElement>(null)
     const eventSourceRef = useRef<EventSource | null>(null)
+    const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null)
 
     const [connection, setConnection] = useState<SSHConnection>({
         host: '192.168.154.1',
@@ -120,6 +122,7 @@ export default function LiveMonitoringPage() {
             if (data.success) {
                 setIsConnected(true)
                 setShowConnectionForm(false)
+                setSessionStartTime(new Date())
                 startStreaming()
             } else {
                 setError(data.error || 'Bağlantı başarısız')
@@ -195,6 +198,38 @@ export default function LiveMonitoringPage() {
             eventSourceRef.current = null
         }
 
+        // Save session logs to database
+        if (logs.length > 0 && sessionStartTime) {
+            try {
+                await fetch('/api/live-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        connection: {
+                            host: connection.host,
+                            port: connection.port,
+                            username: connection.username,
+                            logPath: connection.logPath
+                        },
+                        logs: logs.map(log => ({
+                            timestamp: log.timestamp.toISOString(),
+                            raw: log.raw,
+                            threat_type: log.threat_type,
+                            severity: log.severity,
+                            description: log.description,
+                            source_ip: log.source_ip,
+                            username: log.username
+                        })),
+                        stats,
+                        startedAt: sessionStartTime.toISOString()
+                    })
+                })
+                console.log('✅ Oturum logları kaydedildi')
+            } catch (e) {
+                console.error('Save session error:', e)
+            }
+        }
+
         try {
             await fetch('/api/ssh/disconnect', { method: 'POST' })
         } catch (e) {
@@ -204,6 +239,7 @@ export default function LiveMonitoringPage() {
         setIsConnected(false)
         setIsStreaming(false)
         setShowConnectionForm(true)
+        setSessionStartTime(null)
     }
 
     // Cleanup on unmount
@@ -239,6 +275,119 @@ export default function LiveMonitoringPage() {
         a.href = url
         a.download = `ssh-logs-${new Date().toISOString()}.json`
         a.click()
+    }
+
+    const exportPDF = async () => {
+        // Dynamic import to avoid SSR issues
+        const { default: jsPDF } = await import('jspdf')
+        const autoTable = (await import('jspdf-autotable')).default
+
+        // Turkish character to ASCII mapping
+        const turkishToAscii = (text: string): string => {
+            const map: Record<string, string> = {
+                'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
+                'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
+                'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
+            }
+            return text.replace(/[ıİşŞğĞüÜöÖçÇ]/g, char => map[char] || char)
+        }
+
+        // Use landscape for more space
+        const doc = new jsPDF({ orientation: 'landscape' })
+        const pageWidth = doc.internal.pageSize.getWidth()
+
+        // Header
+        doc.setFillColor(13, 17, 23) // Dark background
+        doc.rect(0, 0, pageWidth, 35, 'F')
+
+        doc.setTextColor(0, 255, 255) // Cyan
+        doc.setFontSize(22)
+        doc.text('LogIz - Canli Izleme Raporu', 14, 18)
+
+        doc.setTextColor(180, 180, 180)
+        doc.setFontSize(10)
+        doc.text(`Olusturulma: ${new Date().toLocaleString('tr-TR')}`, 14, 28)
+        doc.text(`Sunucu: ${connection.host}:${connection.port}`, pageWidth / 2, 28)
+
+        // Stats Summary
+        doc.setTextColor(50, 50, 50)
+        doc.setFontSize(11)
+        doc.text(`Toplam: ${stats.total}  |  Kritik: ${stats.critical}  |  Yuksek: ${stats.high}  |  Orta: ${stats.medium}  |  Dusuk: ${stats.low}  |  Bilgi: ${stats.info}`, 14, 45)
+
+        // Table data (last 200 logs)
+        const tableData = logs.slice(0, 200).map(log => [
+            log.timestamp.toLocaleTimeString('tr-TR'),
+            log.severity,
+            log.threat_type || '-',
+            turkishToAscii(log.description.substring(0, 60) + (log.description.length > 60 ? '...' : '')),
+            log.source_ip || '-',
+            turkishToAscii(log.username || '-')
+        ])
+
+        // AutoTable with better column sizes
+        autoTable(doc, {
+            startY: 52,
+            head: [['Zaman', 'Seviye', 'Tehdit Tipi', 'Aciklama', 'Kaynak IP', 'Kullanici']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: {
+                fillColor: [0, 120, 120],
+                textColor: 255,
+                fontSize: 9,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            bodyStyles: {
+                fontSize: 8,
+                textColor: 40
+            },
+            alternateRowStyles: {
+                fillColor: [248, 248, 248]
+            },
+            columnStyles: {
+                0: { cellWidth: 22, halign: 'center' },  // Zaman
+                1: { cellWidth: 20, halign: 'center' },  // Seviye
+                2: { cellWidth: 35 },                     // Tehdit Tipi
+                3: { cellWidth: 120 },                    // Aciklama (genis)
+                4: { cellWidth: 35 },                     // Kaynak IP (genis)
+                5: { cellWidth: 30 }                      // Kullanici
+            },
+            styles: {
+                overflow: 'linebreak',
+                cellPadding: 3
+            },
+            didParseCell: (data: any) => {
+                // Color severity cells
+                if (data.column.index === 1 && data.section === 'body') {
+                    const severity = data.cell.raw as string
+                    if (severity === 'CRITICAL') {
+                        data.cell.styles.textColor = [220, 38, 38]
+                        data.cell.styles.fontStyle = 'bold'
+                    } else if (severity === 'HIGH') {
+                        data.cell.styles.textColor = [234, 88, 12]
+                        data.cell.styles.fontStyle = 'bold'
+                    } else if (severity === 'MEDIUM') {
+                        data.cell.styles.textColor = [180, 120, 0]
+                    }
+                }
+            }
+        })
+
+        // Footer
+        const pageCount = doc.getNumberOfPages()
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i)
+            doc.setFontSize(8)
+            doc.setTextColor(130, 130, 130)
+            doc.text(
+                `Sayfa ${i} / ${pageCount} - LogIz Guvenlik Izleme Sistemi`,
+                pageWidth / 2,
+                doc.internal.pageSize.getHeight() - 8,
+                { align: 'center' }
+            )
+        }
+
+        doc.save(`logiz-rapor-${new Date().toISOString().split('T')[0]}.pdf`)
     }
 
     return (
@@ -331,7 +480,14 @@ export default function LiveMonitoringPage() {
                         className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-sm font-medium transition-all border border-cyan-500/30"
                     >
                         <Download className="w-4 h-4" />
-                        <span>Dışa Aktar</span>
+                        <span>JSON</span>
+                    </button>
+                    <button
+                        onClick={exportPDF}
+                        className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-sm font-medium transition-all border border-purple-500/30"
+                    >
+                        <FileText className="w-4 h-4" />
+                        <span>PDF Kaydet</span>
                     </button>
                 </div>
             </div>
@@ -504,7 +660,7 @@ export default function LiveMonitoringPage() {
                         </button>
                     ))}
                 </div>
-                <span className="text-sm text-gray-500">({filteredLogs.length} kayıt)</span>
+                <span className="text-sm text-gray-500">({filteredLogs.length} kayıt görüntüleniyor)</span>
             </div>
 
             {/* Logs Container */}
@@ -582,6 +738,64 @@ export default function LiveMonitoringPage() {
                         </p>
                     </div>
                 )}
+            </div>
+
+            {/* Session History Table */}
+            <div className="rounded-2xl bg-gray-900/50 border border-gray-700/50 overflow-hidden">
+                <div className="p-4 border-b border-gray-700/50 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                        <FileText className="w-5 h-5 text-gray-400" />
+                        <span>Oturum Geçmişi</span>
+                    </h2>
+                    <span className="text-sm text-gray-400">{logs.length} toplam kayıt</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-800/50">
+                            <tr>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Zaman</th>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Seviye</th>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Tehdit</th>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Mesaj</th>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Kaynak</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700/50">
+                            {logs.map((log) => (
+                                <tr key={log.id} className="hover:bg-gray-800/30 transition-colors">
+                                    <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
+                                        {log.timestamp.toLocaleTimeString('tr-TR')}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm whitespace-nowrap">
+                                        <span className={cn(
+                                            "px-2 py-0.5 rounded text-xs font-bold",
+                                            severityConfig[log.severity].bg,
+                                            severityConfig[log.severity].text
+                                        )}>
+                                            {log.severity}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-300 whitespace-nowrap">
+                                        {log.threat_type || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-300 max-w-md truncate">
+                                        {log.description}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
+                                        {log.source_ip || '-'}
+                                    </td>
+                                </tr>
+                            ))}
+                            {logs.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
+                                        Henüz kayıt yok
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     )

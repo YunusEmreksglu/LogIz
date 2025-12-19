@@ -19,7 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY app.py .
+COPY ssh_monitor.py .
 COPY ids_model.pkl .
+COPY encoders.pkl .
 
 # Copy label_encoders if exists (optional)
 RUN mkdir -p label_encoders

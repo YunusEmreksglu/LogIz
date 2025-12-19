@@ -6,24 +6,36 @@ import { ShieldOff, Globe, Clock, Ban, ChevronLeft, ChevronRight, Search } from 
 import { PageHeader } from '@/components/dashboard'
 import { cn } from '@/lib/utils'
 
-interface BlockedConnection {
-    id: string
-    timestamp: string
-    sourceIP: string
-    sourceCountry: string
-    destinationPort: number
-    protocol: string
-    reason: string
-    ruleId: string
-    attempts: number
-    lastAttempt: string
+interface BlockedStats {
+    totalBlocked: number
+    uniqueIPs: number
+    topCountry: string
+    last24h: number
 }
 
-
+interface PaginationData {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+}
 
 export default function BlockedTrafficPage() {
     const [blockedData, setBlockedData] = useState<BlockedConnection[]>([])
-    const [filteredData, setFilteredData] = useState<BlockedConnection[]>([])
+    const [stats, setStats] = useState<BlockedStats>({
+        totalBlocked: 0,
+        uniqueIPs: 0,
+        topCountry: '—',
+        last24h: 0
+    })
+    const [pagination, setPagination] = useState<PaginationData>({
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0
+    })
+
+    // Removed filteredData state as we use server-side search
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
@@ -37,8 +49,9 @@ export default function BlockedTrafficPage() {
 
             if (result.success) {
                 setBlockedData(result.data)
-                setFilteredData(result.data)
-                // Stats are now provided by API
+                // Use API provided stats and pagination
+                if (result.stats) setStats(result.stats)
+                if (result.pagination) setPagination(result.pagination)
             }
         } catch (error) {
             console.error('Failed to fetch blocked traffic:', error)
@@ -52,31 +65,12 @@ export default function BlockedTrafficPage() {
         fetchData()
     }, [fetchData])
 
-    useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredData(blockedData)
-        } else {
-            const query = searchQuery.toLowerCase()
-            setFilteredData(blockedData.filter(item =>
-                item.sourceIP.includes(query) ||
-                item.sourceCountry.toLowerCase().includes(query) ||
-                item.reason.toLowerCase().includes(query) ||
-                item.ruleId.toLowerCase().includes(query)
-            ))
-        }
-        setCurrentPage(1)
-    }, [searchQuery, blockedData])
+    // Removed client-side filtering effect since API handles it
 
     const handleRefresh = () => {
         setRefreshing(true)
         fetchData()
     }
-
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage)
-    const paginatedData = filteredData.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
-    )
 
     const formatTime = (timestamp: string) => {
         try {
@@ -99,14 +93,8 @@ export default function BlockedTrafficPage() {
         }
     }
 
-    // Stats
-    const totalBlocked = blockedData.length
-    const uniqueIPs = new Set(blockedData.map(b => b.sourceIP)).size
-    const topCountry = blockedData.reduce((acc, b) => {
-        acc[b.sourceCountry] = (acc[b.sourceCountry] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-    const mostBlockedCountry = Object.entries(topCountry).sort((a, b) => b[1] - a[1])[0]
+    // Stats variables mapped from state
+    const { totalBlocked, uniqueIPs, topCountry, last24h } = stats
 
     return (
         <div className="p-8 space-y-6">
@@ -161,7 +149,7 @@ export default function BlockedTrafficPage() {
                         </div>
                         <span className="text-sm text-gray-400">Top Country</span>
                     </div>
-                    <div className="text-2xl font-bold text-white">{mostBlockedCountry?.[0] || '—'}</div>
+                    <div className="text-2xl font-bold text-white">{topCountry || '—'}</div>
                 </motion.div>
 
                 <motion.div
@@ -177,7 +165,7 @@ export default function BlockedTrafficPage() {
                         <span className="text-sm text-gray-400">Last 24h</span>
                     </div>
                     <div className="text-2xl font-bold text-white">
-                        {blockedData.filter(b => Date.now() - new Date(b.timestamp).getTime() < 86400000).length}
+                        {last24h.toLocaleString()}
                     </div>
                 </motion.div>
             </div>
@@ -221,7 +209,7 @@ export default function BlockedTrafficPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700/30">
-                            {paginatedData.map((item, index) => (
+                            {blockedData.map((item, index) => (
                                 <motion.tr
                                     key={item.id}
                                     initial={{ opacity: 0 }}
@@ -271,26 +259,26 @@ export default function BlockedTrafficPage() {
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-5 py-4 border-t border-gray-700/50">
                     <span className="text-sm text-gray-400">
-                        Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredData.length)} of {filteredData.length}
+                        Showing {(pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
                     </span>
                     <div className="flex items-center space-x-2">
                         <button
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
+                            disabled={pagination.page === 1}
                             className={cn(
                                 'p-2 rounded-lg transition-colors',
-                                currentPage === 1 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                pagination.page === 1 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             )}
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
-                        <span className="text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
+                        <span className="text-sm text-gray-400">Page {pagination.page} of {pagination.totalPages}</span>
                         <button
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                            disabled={pagination.page === pagination.totalPages}
                             className={cn(
                                 'p-2 rounded-lg transition-colors',
-                                currentPage === totalPages ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                pagination.page === pagination.totalPages ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             )}
                         >
                             <ChevronRight className="w-5 h-5" />

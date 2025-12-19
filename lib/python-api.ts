@@ -96,6 +96,7 @@ export async function analyzeLogWithPython(data: AnalysisRequest): Promise<Analy
         // Pass through additional data from Python API
         severity_summary: result.severity_summary,
         attack_type_distribution: result.attack_type_distribution,
+        totalLogLines: result.results.total_records, // Capture total read lines
       } as any
     }
 

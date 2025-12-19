@@ -1,6 +1,6 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { supabase } from "@/lib/supabase"
+// import { supabase } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
@@ -16,14 +16,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password required")
         }
 
-        // Fetch user from Supabase 'users' table
-        const { data: user, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', credentials.email)
-          .single()
+        const { prisma } = await import("@/lib/prisma")
 
-        if (error || !user || !user.password) {
+        // Fetch user from database using Prisma
+        const user = await prisma.user.findUnique({
+          where: {
+            email: credentials.email
+          }
+        })
+
+        if (!user || !user.password) {
           throw new Error("Invalid credentials")
         }
 

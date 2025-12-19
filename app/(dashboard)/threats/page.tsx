@@ -18,6 +18,21 @@ interface ThreatEvent {
     confidence: number
 }
 
+interface ThreatsStats {
+    total: number
+    critical: number
+    high: number
+    active: number
+    resolved: number
+}
+
+interface PaginationData {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+}
+
 const severityColors = {
     CRITICAL: 'bg-red-500/10 text-red-400 border-red-500/20',
     HIGH: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
@@ -33,7 +48,21 @@ const statusColors = {
 
 export default function ThreatEventsPage() {
     const [threats, setThreats] = useState<ThreatEvent[]>([])
-    const [filteredThreats, setFilteredThreats] = useState<ThreatEvent[]>([])
+    const [stats, setStats] = useState<ThreatsStats>({
+        total: 0,
+        critical: 0,
+        high: 0,
+        active: 0,
+        resolved: 0
+    })
+    const [pagination, setPagination] = useState<PaginationData>({
+        page: 1,
+        limit: 15,
+        total: 0,
+        totalPages: 0
+    })
+
+    // Removed filteredThreats state
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [currentPage, setCurrentPage] = useState(1)
@@ -43,7 +72,10 @@ export default function ThreatEventsPage() {
 
     const fetchData = useCallback(async () => {
         try {
-            const response = await fetch('/api/threats?limit=100')
+            const severityParam = severityFilter !== 'all' ? `&severity=${severityFilter}` : ''
+            // Note: Status filter is client-side only for now or ignored as backend doesn't support it fully yet
+
+            const response = await fetch(`/api/threats?page=${currentPage}&limit=${itemsPerPage}${severityParam}`)
             const result = await response.json()
 
             if (result.success && result.data) {
@@ -54,12 +86,14 @@ export default function ThreatEventsPage() {
                     sourceIP: t.sourceIP,
                     destinationIP: t.destinationIP,
                     severity: t.severity,
-                    status: 'active', // Default as not in DB
+                    status: 'active', // Default 
                     description: t.description,
                     confidence: Math.round((t.confidence || 0) * 100),
                 }))
                 setThreats(mappedThreats)
-                setFilteredThreats(mappedThreats)
+
+                if (result.stats) setStats(result.stats)
+                if (result.pagination) setPagination(result.pagination)
             }
         } catch (error) {
             console.error('Failed to fetch threats:', error)
@@ -67,34 +101,18 @@ export default function ThreatEventsPage() {
             setLoading(false)
             setRefreshing(false)
         }
-    }, [])
+    }, [currentPage, severityFilter])
 
     useEffect(() => {
         fetchData()
     }, [fetchData])
 
-    useEffect(() => {
-        let filtered = threats
-        if (severityFilter !== 'all') {
-            filtered = filtered.filter(t => t.severity === severityFilter)
-        }
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(t => t.status === statusFilter)
-        }
-        setFilteredThreats(filtered)
-        setCurrentPage(1)
-    }, [severityFilter, statusFilter, threats])
+    // Removed client-side effect for filtering
 
     const handleRefresh = () => {
         setRefreshing(true)
         fetchData()
     }
-
-    const totalPages = Math.ceil(filteredThreats.length / itemsPerPage)
-    const paginatedThreats = filteredThreats.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
-    )
 
     const formatDate = (timestamp: string) => {
         try {
@@ -104,8 +122,7 @@ export default function ThreatEventsPage() {
         }
     }
 
-    const criticalCount = threats.filter(t => t.severity === 'CRITICAL').length
-    const activeCount = threats.filter(t => t.status === 'active').length
+    const { total, critical, active, resolved } = stats
 
     return (
         <div className="p-8 space-y-6">
@@ -125,7 +142,7 @@ export default function ThreatEventsPage() {
                     className="p-5 rounded-2xl bg-gray-900/50 border border-gray-700/50"
                 >
                     <div className="text-sm text-gray-400 mb-2">Total Threats</div>
-                    <div className="text-2xl font-bold text-white">{threats.length}</div>
+                    <div className="text-2xl font-bold text-white">{total.toLocaleString()}</div>
                 </motion.div>
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -134,7 +151,7 @@ export default function ThreatEventsPage() {
                     className="p-5 rounded-2xl bg-red-500/5 border border-red-500/20"
                 >
                     <div className="text-sm text-gray-400 mb-2">Critical</div>
-                    <div className="text-2xl font-bold text-red-400">{criticalCount}</div>
+                    <div className="text-2xl font-bold text-red-400">{critical.toLocaleString()}</div>
                 </motion.div>
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -143,7 +160,7 @@ export default function ThreatEventsPage() {
                     className="p-5 rounded-2xl bg-orange-500/5 border border-orange-500/20"
                 >
                     <div className="text-sm text-gray-400 mb-2">Active</div>
-                    <div className="text-2xl font-bold text-orange-400">{activeCount}</div>
+                    <div className="text-2xl font-bold text-orange-400">{active.toLocaleString()}</div>
                 </motion.div>
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -153,7 +170,7 @@ export default function ThreatEventsPage() {
                 >
                     <div className="text-sm text-gray-400 mb-2">Resolved</div>
                     <div className="text-2xl font-bold text-emerald-400">
-                        {threats.filter(t => t.status === 'resolved').length}
+                        {resolved.toLocaleString()}
                     </div>
                 </motion.div>
             </div>
@@ -184,12 +201,11 @@ export default function ThreatEventsPage() {
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
-                        className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500"
+                        className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500 cursor-not-allowed opacity-50"
+                        disabled
                     >
-                        <option value="all">All Statuses</option>
-                        <option value="active">Active</option>
-                        <option value="investigating">Investigating</option>
-                        <option value="resolved">Resolved</option>
+                        <option value="all">Active Only</option>
+                        {/* Status filter disabled as backend assumes all active for now */}
                     </select>
                 </div>
                 <button className="flex items-center space-x-2 px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-700/50 transition-colors">
@@ -219,7 +235,7 @@ export default function ThreatEventsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700/30">
-                            {paginatedThreats.map((threat, index) => (
+                            {threats.map((threat, index) => (
                                 <motion.tr
                                     key={threat.id}
                                     initial={{ opacity: 0 }}
@@ -278,28 +294,28 @@ export default function ThreatEventsPage() {
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-5 py-4 border-t border-gray-700/50">
                     <span className="text-sm text-gray-400">
-                        Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredThreats.length)} of {filteredThreats.length}
+                        Showing {(pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
                     </span>
                     <div className="flex items-center space-x-2">
                         <button
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
+                            disabled={pagination.page === 1}
                             className={cn(
                                 'p-2 rounded-lg transition-colors',
-                                currentPage === 1 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                pagination.page === 1 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             )}
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                         <span className="text-sm text-gray-400">
-                            Page {currentPage} of {totalPages}
+                            Page {pagination.page} of {pagination.totalPages}
                         </span>
                         <button
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                            disabled={pagination.page === pagination.totalPages}
                             className={cn(
                                 'p-2 rounded-lg transition-colors',
-                                currentPage === totalPages ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                pagination.page === pagination.totalPages ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             )}
                         >
                             <ChevronRight className="w-5 h-5" />

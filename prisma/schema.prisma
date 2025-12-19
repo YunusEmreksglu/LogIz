@@ -5,9 +5,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -137,3 +136,50 @@ model ApiKey {
   @@map("api_keys")
   @@index([userId])
 }
+
+// Live Monitoring Sessions
+model LiveSession {
+  id            String    @id @default(cuid())
+  host          String
+  port          Int       @default(22)
+  username      String
+  logPath       String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  
+  // Stats
+  totalLogs     Int       @default(0)
+  criticalCount Int       @default(0)
+  highCount     Int       @default(0)
+  mediumCount   Int       @default(0)
+  lowCount      Int       @default(0)
+  infoCount     Int       @default(0)
+  
+  // Threat type distribution (JSON)
+  threatTypes   Json?     // e.g., {"BRUTE_FORCE": 5, "ROOT_LOGIN": 1}
+  
+  logs          LiveLog[]
+  
+  @@map("live_sessions")
+  @@index([startedAt])
+}
+
+model LiveLog {
+  id          String      @id @default(cuid())
+  timestamp   DateTime    @default(now())
+  raw         String
+  threatType  String?     // BRUTE_FORCE, ROOT_LOGIN, etc.
+  severity    ThreatLevel
+  description String
+  sourceIP    String?
+  username    String?
+  
+  sessionId   String
+  session     LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("live_logs")
+  @@index([sessionId])
+  @@index([severity])
+  @@index([threatType])
+}
+

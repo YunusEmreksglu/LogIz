@@ -188,9 +188,9 @@ class SSHLogMonitor:
         self.is_streaming = True
         
         try:
-            # tail -f komutu çalıştır
+            # tail -n 50 -f komutu ile son 50 satırı al ve takibe devam et
             stdin, stdout, stderr = self.client.exec_command(
-                f'tail -f {log_path}',
+                f'tail -n 50 -f {log_path}',
                 get_pty=True
             )
             
