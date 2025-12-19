@@ -17,18 +17,22 @@ const categoryConfig = [
 
 export async function GET() {
     try {
-        // Get ALL analyses to aggregate true stats from JSON result
+        // Get analyses with their logFile - filter out orphans in processing
         const analyses = await prisma.analysis.findMany({
             select: {
                 result: true,
-                threatCount: true
+                threatCount: true,
+                logFileId: true
             }
         })
+
+        // Filter to only include analyses with valid logFileId
+        const validAnalyses = analyses.filter(a => a.logFileId != null)
 
         // Aggregate counts from all analyses
         const threatCounts: Record<string, number> = {}
 
-        analyses.forEach(analysis => {
+        validAnalyses.forEach(analysis => {
             const result = analysis.result as any
             if (result && result.attack_type_distribution) {
                 Object.entries(result.attack_type_distribution).forEach(([type, count]) => {
@@ -80,7 +84,7 @@ export async function GET() {
         // Get total events from analysis results (aggregated lines)
         let totalEvents = 0
 
-        analyses.forEach(analysis => {
+        validAnalyses.forEach(analysis => {
             const result = analysis.result as any
 
             // Python API saves: totalLogLines (from result.results.total_records)
