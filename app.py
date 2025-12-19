@@ -8,14 +8,36 @@ from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
 
-# Flask App
+# ==================== CONFIGURATION CONSTANTS ====================
+# Dosya yükleme limitleri
+MAX_UPLOAD_SIZE_MB = 50
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+# Severity threshold sabitleri
+SEVERITY_CRITICAL_THRESHOLD = 0.7
+SEVERITY_HIGH_THRESHOLD = 0.8
+SEVERITY_MEDIUM_THRESHOLD = 0.7
+SEVERITY_LOW_THRESHOLD = 0.5
+
+# Analiz limitleri
+TOP_ATTACKS_LIMIT = 100
+RECENT_ATTACKS_LIMIT = 50
+
+# Byte dönüşüm sabitleri
+BYTES_PER_KB = 1000
+BYTES_PER_MB = 1000000
+
+# Veritabanı yapılandırması (environment variable ile override edilebilir)
+DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///test_ids.db')
+
+# ==================== FLASK APP ====================
 app = Flask(__name__)
 CORS(app)
 
-# Basit SQLite kullan (test için)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test_ids.db'
+# Veritabanı yapılandırması
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE_BYTES
 
 # Database
 db = SQLAlchemy(app)
@@ -35,34 +57,42 @@ ENCODER_PATHS = [
 ]
 
 # Global değişkenler - başlangıçta yüklenir
-model = None
+mlModel = None
 ENCODER_DICT = None
 
-# Model yükle
-for path in MODEL_PATHS:
-    try:
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                model = pickle.load(f)
-            print(f"✅ Model yüklendi: {path}")
-            break
-    except Exception as e:
-        continue
 
-if model is None:
+def load_pickle_from_paths(pathsList: list, itemName: str):
+    """
+    Verilen path listesinden pickle dosyasını yükler.
+    DRY principle - tekrar eden yükleme kodunu önler.
+    
+    Args:
+        pathsList: Pickle dosyası aranacak path listesi
+        itemName: Log mesajları için öğe adı (örn: "Model", "Encoder")
+    
+    Returns:
+        Yüklenen nesne veya None
+    """
+    for filePath in pathsList:
+        try:
+            if os.path.exists(filePath):
+                with open(filePath, 'rb') as pickleFile:
+                    loadedItem = pickle.load(pickleFile)
+                print(f"✅ {itemName} yüklendi: {filePath}")
+                return loadedItem
+        except Exception as loadError:
+            print(f"⚠️ {itemName} yüklenirken hata ({filePath}): {loadError}")
+            continue
+    return None
+
+
+# Model yükle
+mlModel = load_pickle_from_paths(MODEL_PATHS, "Model")
+if mlModel is None:
     print("❌ Model yüklenemedi! Lütfen model yolunu kontrol et.")
 
-# Encoder yükle (global - her istekte yükleme yok)
-for path in ENCODER_PATHS:
-    try:
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                ENCODER_DICT = pickle.load(f)
-            print(f"✅ Encoderlar yüklendi: {path}")
-            break
-    except Exception as e:
-        continue
-
+# Encoder yükle
+ENCODER_DICT = load_pickle_from_paths(ENCODER_PATHS, "Encoderlar")
 if ENCODER_DICT is None:
     print("⚠️ Encoder bulunamadı, yeni encoder oluşturulacak")
 
@@ -126,88 +156,88 @@ def generate_realistic_ip(attack_type: str = None) -> str:
     return f"{ip_prefix}{last_octet}"
 
 # Dinamik açıklama oluşturucu
-def generate_dynamic_description(attack_type: str, row: dict, prob: float) -> str:
+def generate_dynamic_description(attackType: str, row: dict, probability: float) -> str:
     """Her satır için benzersiz, context-based açıklama oluştur"""
-    proto = str(row.get('proto', 'unknown')).upper()
+    protocol = str(row.get('proto', 'unknown')).upper()
     service = str(row.get('service', '-'))
     state = str(row.get('state', 'unknown'))
-    sbytes = int(row.get('sbytes', 0)) if pd.notna(row.get('sbytes')) else 0
-    dbytes = int(row.get('dbytes', 0)) if pd.notna(row.get('dbytes')) else 0
-    dur = float(row.get('dur', 0)) if pd.notna(row.get('dur')) else 0
+    sourceBytes = int(row.get('sbytes', 0)) if pd.notna(row.get('sbytes')) else 0
+    destinationBytes = int(row.get('dbytes', 0)) if pd.notna(row.get('dbytes')) else 0
+    duration = float(row.get('dur', 0)) if pd.notna(row.get('dur')) else 0
     
     # Servis bilgisi
-    service_info = f" ({service} servisi)" if service and service != '-' else ""
+    serviceInfo = f" ({service} servisi)" if service and service != '-' else ""
     
     # Veri boyutu bilgisi
-    total_bytes = sbytes + dbytes
-    if total_bytes > 1000000:
-        size_info = f" ({total_bytes/1000000:.1f} MB veri transferi)"
-    elif total_bytes > 1000:
-        size_info = f" ({total_bytes/1000:.1f} KB veri transferi)"
+    totalBytes = sourceBytes + destinationBytes
+    if totalBytes > BYTES_PER_MB:
+        sizeInfo = f" ({totalBytes/BYTES_PER_MB:.1f} MB veri transferi)"
+    elif totalBytes > BYTES_PER_KB:
+        sizeInfo = f" ({totalBytes/BYTES_PER_KB:.1f} KB veri transferi)"
     else:
-        size_info = f" ({total_bytes} bytes)" if total_bytes > 0 else ""
+        sizeInfo = f" ({totalBytes} bytes)" if totalBytes > 0 else ""
     
     # Süre bilgisi
-    dur_info = f", {dur:.2f}s süre" if dur > 0 else ""
+    durationInfo = f", {duration:.2f}s süre" if duration > 0 else ""
     
     # Saldırı türüne göre özelleştirilmiş açıklamalar
     descriptions = {
         'Backdoor': [
-            f"{proto} protokolü üzerinden yetkisiz erişim kapısı girişimi{service_info}{size_info}",
-            f"Gizli kanal oluşturma denemesi{service_info}, {state} durumunda{dur_info}",
-            f"Uzaktan erişim trojanı (RAT) aktivitesi{size_info}{dur_info}",
+            f"{protocol} protokolü üzerinden yetkisiz erişim kapısı girişimi{serviceInfo}{sizeInfo}",
+            f"Gizli kanal oluşturma denemesi{serviceInfo}, {state} durumunda{durationInfo}",
+            f"Uzaktan erişim trojanı (RAT) aktivitesi{sizeInfo}{durationInfo}",
         ],
         'Exploits': [
-            f"{proto} üzerinden güvenlik açığı istismarı{service_info}{size_info}",
-            f"Sistem zafiyeti sömürme girişimi{service_info}, {state} durumunda",
-            f"Buffer overflow/injection saldırısı{size_info}{dur_info}",
+            f"{protocol} üzerinden güvenlik açığı istismarı{serviceInfo}{sizeInfo}",
+            f"Sistem zafiyeti sömürme girişimi{serviceInfo}, {state} durumunda",
+            f"Buffer overflow/injection saldırısı{sizeInfo}{durationInfo}",
         ],
         'DoS': [
-            f"{proto} flood saldırısı{service_info}{size_info}",
-            f"Hizmet kesintisi amaçlı aşırı yük{service_info}{dur_info}",
-            f"Kaynak tüketimi saldırısı ({total_bytes} bytes){dur_info}",
+            f"{protocol} flood saldırısı{serviceInfo}{sizeInfo}",
+            f"Hizmet kesintisi amaçlı aşırı yük{serviceInfo}{durationInfo}",
+            f"Kaynak tüketimi saldırısı ({totalBytes} bytes){durationInfo}",
         ],
         'Reconnaissance': [
-            f"{proto} port tarama aktivitesi{service_info}",
-            f"Ağ keşfi ve haritalama{service_info}, {state} durumu",
-            f"Sistem parmak izi alma girişimi{size_info}",
+            f"{protocol} port tarama aktivitesi{serviceInfo}",
+            f"Ağ keşfi ve haritalama{serviceInfo}, {state} durumu",
+            f"Sistem parmak izi alma girişimi{sizeInfo}",
         ],
         'Shellcode': [
-            f"{proto} üzerinden kod enjeksiyonu{service_info}{size_info}",
-            f"Zararlı payload tespit edildi{service_info}{dur_info}",
-            f"Bellek manipülasyonu saldırısı{size_info}",
+            f"{protocol} üzerinden kod enjeksiyonu{serviceInfo}{sizeInfo}",
+            f"Zararlı payload tespit edildi{serviceInfo}{durationInfo}",
+            f"Bellek manipülasyonu saldırısı{sizeInfo}",
         ],
         'Fuzzers': [
-            f"{proto} fuzzing testi{service_info}{size_info}",
-            f"Rastgele veri ile güvenlik testi{service_info}{dur_info}",
-            f"Protokol belirsizlik testi{size_info}",
+            f"{protocol} fuzzing testi{serviceInfo}{sizeInfo}",
+            f"Rastgele veri ile güvenlik testi{serviceInfo}{durationInfo}",
+            f"Protokol belirsizlik testi{sizeInfo}",
         ],
         'Worms': [
-            f"Kendini kopyalayan zararlı yazılım{service_info}{size_info}",
-            f"Ağ solucanı yayılma girişimi{service_info}{dur_info}",
-            f"Otomatik saldırı propagasyonu{size_info}",
+            f"Kendini kopyalayan zararlı yazılım{serviceInfo}{sizeInfo}",
+            f"Ağ solucanı yayılma girişimi{serviceInfo}{durationInfo}",
+            f"Otomatik saldırı propagasyonu{sizeInfo}",
         ],
         'Generic': [
-            f"{proto} üzerinden şüpheli aktivite{service_info}{size_info}",
-            f"Anomali tespit edildi{service_info}, {state} durumu{dur_info}",
-            f"Bilinmeyen saldırı kalıbı{size_info}",
+            f"{protocol} üzerinden şüpheli aktivite{serviceInfo}{sizeInfo}",
+            f"Anomali tespit edildi{serviceInfo}, {state} durumu{durationInfo}",
+            f"Bilinmeyen saldırı kalıbı{sizeInfo}",
         ],
         'Analysis': [
-            f"{proto} trafik analizi saldırısı{service_info}",
-            f"Paket dinleme/sniffing aktivitesi{size_info}",
-            f"Veri sızıntısı riski{service_info}{dur_info}",
+            f"{protocol} trafik analizi saldırısı{serviceInfo}",
+            f"Paket dinleme/sniffing aktivitesi{sizeInfo}",
+            f"Veri sızıntısı riski{serviceInfo}{durationInfo}",
         ],
     }
     
     # Hash ile tutarlı rastgele seçim (aynı satır her zaman aynı açıklamayı alır)
     import hashlib
-    row_hash = hashlib.md5(str(row).encode()).hexdigest()
-    hash_int = int(row_hash[:8], 16)
+    rowHash = hashlib.md5(str(row).encode()).hexdigest()
+    hashInteger = int(rowHash[:8], 16)
     
-    type_descriptions = descriptions.get(attack_type, [f"{attack_type} saldırısı tespit edildi{size_info}"])
-    selected_idx = hash_int % len(type_descriptions)
+    typeDescriptions = descriptions.get(attackType, [f"{attackType} saldırısı tespit edildi{sizeInfo}"])
+    selectedIndex = hashInteger % len(typeDescriptions)
     
-    return type_descriptions[selected_idx]
+    return typeDescriptions[selectedIndex]
 
 
 # Severity belirleme fonksiyonu
@@ -216,16 +246,175 @@ def get_severity(attack_type: str, probability: float) -> str:
     critical_types = ['Backdoor', 'Shellcode', 'Worms', 'Exploits']
     high_types = ['DoS', 'Reconnaissance']
     
-    if attack_type in critical_types and probability > 0.7:
+    if attack_type in critical_types and probability > SEVERITY_CRITICAL_THRESHOLD:
         return 'CRITICAL'
-    elif attack_type in critical_types or (attack_type in high_types and probability > 0.8):
+    elif attack_type in critical_types or (attack_type in high_types and probability > SEVERITY_HIGH_THRESHOLD):
         return 'HIGH'
-    elif probability > 0.7:
+    elif probability > SEVERITY_MEDIUM_THRESHOLD:
         return 'MEDIUM'
-    elif probability > 0.5:
+    elif probability > SEVERITY_LOW_THRESHOLD:
         return 'LOW'
     else:
         return 'INFO'
+
+
+# ==================== HELPER FUNCTIONS ====================
+# Bu fonksiyonlar Single Responsibility Principle'a uygun olarak ayrıldı
+
+def extract_file_from_request(requestObj) -> tuple:
+    """
+    Request'ten dosyayı çıkarır (JSON Base64 veya Multipart Form).
+    Returns: (file, error_response) - file None ise error_response döner
+    """
+    import base64
+    import io
+    
+    file = None
+    
+    if requestObj.is_json:
+        data = requestObj.get_json()
+        if 'file_content' in data:
+            try:
+                # Base64 decode
+                fileBytes = base64.b64decode(data['file_content'])
+                
+                # Clean CSV quotes if present
+                try:
+                    contentStr = fileBytes.decode('utf-8')
+                    lines = contentStr.splitlines()
+                    cleanedLines = []
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith('"') and line.endswith('"'):
+                            line = line[1:-1]
+                        cleanedLines.append(line)
+                    cleanedContent = "\n".join(cleanedLines)
+                    file = io.BytesIO(cleanedContent.encode('utf-8'))
+                except Exception as cleanError:
+                    print(f"CSV cleaning failed, using raw bytes: {cleanError}")
+                    file = io.BytesIO(fileBytes)
+
+                file.filename = data.get('filename', 'uploaded.csv')
+            except Exception as decodeError:
+                return None, ({'error': f'Base64 decode hatası: {str(decodeError)}'}, 400)
+
+    if file is None:
+        if 'file' not in requestObj.files:
+            return None, ({'error': 'Dosya bulunamadı'}, 400)
+        file = requestObj.files['file']
+
+    if file.filename == '':
+        return None, ({'error': 'Dosya seçilmedi'}, 400)
+
+    allowedExtensions = {'.csv', '.txt', '.log'}
+    extension = os.path.splitext(file.filename)[1].lower()
+    if extension not in allowedExtensions:
+        return None, ({'error': 'Sadece CSV, TXT ve LOG dosyaları kabul edilir'}, 400)
+
+    return file, None
+
+
+def encode_categorical_columns(dataFrame: pd.DataFrame) -> pd.DataFrame:
+    """
+    DataFrame'deki kategorik kolonları encode eder.
+    Global ENCODER_DICT varsa onu kullanır, yoksa yeni encoder oluşturur.
+    """
+    categoricalColumns = ["proto", "service", "state", "attack_cat"]
+    
+    for column in categoricalColumns:
+        if column in dataFrame.columns and column != 'attack_cat':
+            dataFrame[column] = dataFrame[column].astype(str)
+            
+            if ENCODER_DICT and column in ENCODER_DICT:
+                labelEncoder = ENCODER_DICT[column]
+                knownClasses = set(labelEncoder.classes_)
+                fallbackValue = 'unknown' if 'unknown' in knownClasses else labelEncoder.classes_[0]
+                dataFrame[column] = dataFrame[column].apply(lambda x: x if x in knownClasses else fallbackValue)
+                dataFrame[column] = labelEncoder.transform(dataFrame[column])
+            else:
+                from sklearn.preprocessing import LabelEncoder
+                labelEncoder = LabelEncoder()
+                dataFrame[column] = labelEncoder.fit_transform(dataFrame[column])
+    
+    return dataFrame
+
+
+def prepare_features(dataFrame: pd.DataFrame, mlModel) -> pd.DataFrame:
+    """
+    Model için feature'ları hazırlar. Eksik kolonları ekler, fazlaları atar.
+    """
+    features = dataFrame.drop(columns=["label", "attack_cat"], errors='ignore')
+
+    if hasattr(mlModel, 'feature_names_in_'):
+        expectedColumns = mlModel.feature_names_in_
+        # Eksik kolonlar varsa 0 ekle
+        for column in expectedColumns:
+            if column not in features.columns:
+                features[column] = 0
+        # Sadece modelin bildiği kolonları, doğru sırada seç
+        features = features[expectedColumns]
+    
+    return features
+
+
+def run_ml_predictions(features: pd.DataFrame, mlModel) -> tuple:
+    """
+    ML modelini çalıştırır ve tahminleri döndürür.
+    Returns: (predictions, probabilities, predictionTime)
+    """
+    import time
+    startTime = time.time()
+    
+    probabilities = mlModel.predict_proba(features)[:, 1]  # Sadece pozitif sınıf olasılığı
+    predictions = (probabilities > 0.5).astype(int)  # Threshold ile tahmin
+    
+    predictionTime = time.time() - startTime
+    print(f"⏱️ Tahmin süresi: {predictionTime:.2f}s")
+    
+    return predictions, probabilities, predictionTime
+
+
+def build_attack_details(attacksDataFrame: pd.DataFrame) -> list:
+    """
+    Saldırı DataFrame'inden detaylı saldırı listesi oluşturur.
+    """
+    attacksList = []
+    
+    for idx, row in attacksDataFrame.iterrows():
+        attackType = str(row.get('attack_cat', 'Unknown'))
+        probability = float(row['probability'])
+        
+        # Dinamik açıklama oluştur
+        dynamicDescription = generate_dynamic_description(attackType, row.to_dict(), probability)
+        
+        # Ek detaylar
+        sourceBytesIn = int(row.get('sbytes', 0)) if pd.notna(row.get('sbytes')) else 0
+        destinationBytesOut = int(row.get('dbytes', 0)) if pd.notna(row.get('dbytes')) else 0
+        duration = float(row.get('dur', 0)) if pd.notna(row.get('dur')) else 0
+        
+        attack = {
+            'type': attackType,
+            'severity': get_severity(attackType, probability),
+            'description': dynamicDescription,
+            'sourceIP': str(row.get('srcip')) if pd.notna(row.get('srcip')) and str(row.get('srcip')) not in ['', 'N/A', 'nan'] else generate_realistic_ip(attackType),
+            'targetIP': str(row.get('dstip')) if pd.notna(row.get('dstip')) and str(row.get('dstip')) not in ['', 'N/A', 'nan'] else '10.0.0.' + str(random.randint(1, 254)),
+            'sourcePort': int(row.get('sport', 0)) if pd.notna(row.get('sport')) else None,
+            'targetPort': int(row.get('dsport', 0)) if pd.notna(row.get('dsport')) else None,
+            'protocol': str(row.get('proto', 'Unknown')),
+            'service': str(row.get('service', '-')),
+            'state': str(row.get('state', 'Unknown')),
+            'confidence': probability,
+            'bytesIn': sourceBytesIn,
+            'bytesOut': destinationBytesOut,
+            'totalBytes': sourceBytesIn + destinationBytesOut,
+            'duration': duration,
+            'packetsIn': int(row.get('spkts', 0)) if pd.notna(row.get('spkts')) else 0,
+            'packetsOut': int(row.get('dpkts', 0)) if pd.notna(row.get('dpkts')) else 0,
+            'recordId': int(idx),
+        }
+        attacksList.append(attack)
+    
+    return attacksList
 
 
 # ==================== DATABASE MODELS ====================
@@ -295,153 +484,81 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
-        'model_loaded': model is not None,
+        'model_loaded': mlModel is not None,
         'database': 'sqlite'
     })
 
 
 @app.route('/api/analyze/upload', methods=['POST'])
 def upload_and_analyze():
-    """CSV dosyası yükle ve ANİNDA analiz et (Celery yok)"""
-
-    if model is None:
+    """
+    CSV dosyası yükle ve anında analiz et.
+    Refactored: Helper fonksiyonlar kullanılarak SRP uygulandı.
+    """
+    # Model kontrolü
+    if mlModel is None:
         return jsonify({'error': 'Model yüklenmedi'}), 500
 
-    # Dosya kaynağını belirle (JSON Base64 veya Multipart Form)
-    file = None
-    
-    if request.is_json:
-        data = request.get_json()
-        if 'file_content' in data:
-            import base64
-            import io
-            try:
-                # Base64 decode
-                file_bytes = base64.b64decode(data['file_content'])
-                
-                # Clean CSV quotes if present
-                try:
-                    content_str = file_bytes.decode('utf-8')
-                    lines = content_str.splitlines()
-                    cleaned_lines = []
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith('"') and line.endswith('"'):
-                            line = line[1:-1]
-                        cleaned_lines.append(line)
-                    cleaned_content = "\n".join(cleaned_lines)
-                    file = io.BytesIO(cleaned_content.encode('utf-8'))
-                except Exception as e:
-                    print(f"CSV cleaning failed, using raw bytes: {e}")
-                    file = io.BytesIO(file_bytes)
-
-                file.filename = data.get('filename', 'uploaded.csv')
-            except Exception as e:
-                return jsonify({'error': f'Base64 decode hatası: {str(e)}'}), 400
-
-    if file is None:
-        if 'file' not in request.files:
-            return jsonify({'error': 'Dosya bulunamadı'}), 400
-        file = request.files['file']
-
-    if file.filename == '':
-        return jsonify({'error': 'Dosya seçilmedi'}), 400
-
-    allowed_extensions = {'.csv', '.txt', '.log'}
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_extensions:
-        return jsonify({'error': 'Sadece CSV, TXT ve LOG dosyaları kabul edilir'}), 400
+    # 1. Dosyayı request'ten çıkar
+    file, errorResponse = extract_file_from_request(request)
+    if errorResponse:
+        return jsonify(errorResponse[0]), errorResponse[1]
 
     try:
-        # CSV'yi doğrudan oku (kaydetmeden)
-        data = pd.read_csv(file)
+        # 2. CSV'yi oku
+        csvData = pd.read_csv(file)
+        print(f"📊 CSV okundu: {len(csvData)} satır")
+        print(f"Kolonlar: {list(csvData.columns)}")
 
-        print(f"📊 CSV okundu: {len(data)} satır")
-        print(f"Kolonlar: {list(data.columns)}")
+        # 3. Kategorik kolonları encode et
+        csvData = encode_categorical_columns(csvData)
 
-        # Kategorik kolonları encode et (Global encoder kullan - her istekte yükleme yok)
-        categorical_cols = ["proto", "service", "state", "attack_cat"]
-        
-        for col in categorical_cols:
-            if col in data.columns and col != 'attack_cat':
-                data[col] = data[col].astype(str)
-                
-                if ENCODER_DICT and col in ENCODER_DICT:
-                    le = ENCODER_DICT[col]
-                    known_classes = set(le.classes_)
-                    fallback_value = 'unknown' if 'unknown' in known_classes else le.classes_[0]
-                    data[col] = data[col].apply(lambda x: x if x in known_classes else fallback_value)
-                    data[col] = le.transform(data[col])
-                else:
-                    from sklearn.preprocessing import LabelEncoder
-                    le = LabelEncoder()
-                    data[col] = le.fit_transform(data[col])
+        # 4. Feature'ları hazırla
+        features = prepare_features(csvData, mlModel)
+        print(f"🔍 Tahmin yapılıyor: {len(features)} kayıt")
 
-        # Feature'ları hazırla
-        X = data.drop(columns=["label", "attack_cat"], errors='ignore')
+        # 5. ML tahminleri çalıştır
+        predictions, probabilities, predictionTime = run_ml_predictions(features, mlModel)
 
-        if hasattr(model, 'feature_names_in_'):
-            expected_cols = model.feature_names_in_
-            # Eksik kolonlar varsa 0 ekle, fazla varsa at
-            for col in expected_cols:
-                if col not in X.columns:
-                    X[col] = 0
-            # Sadece modelin bildiği kolonları, doğru sırada seç
-            X = X[expected_cols]
-
-        print(f"🔍 Tahmin yapılıyor: {len(X)} kayıt")
-
-        # OPTİMİZE: Tek prediction çağrısı (2x hız artışı)
-        import time
-        start_time = time.time()
-        
-        probabilities = model.predict_proba(X)[:, 1]  # Sadece pozitif sınıf olasılığı
-        predictions = (probabilities > 0.5).astype(int)  # Threshold ile tahmin (çok hızlı)
-        
-        prediction_time = time.time() - start_time
-        print(f"⏱️ Tahmin süresi: {prediction_time:.2f}s")
-
-        # Sonuçları hesapla
-        attacks_detected = int(np.sum(predictions == 1))
-        normal_traffic = int(np.sum(predictions == 0))
-        total_records = len(predictions)
-        attack_percentage = round((attacks_detected / total_records) * 100, 2)
+        # 6. Sonuçları hesapla
+        attacksDetected = int(np.sum(predictions == 1))
+        normalTraffic = int(np.sum(predictions == 0))
+        totalRecords = len(predictions)
+        attackPercentage = round((attacksDetected / totalRecords) * 100, 2)
 
         print(f"✅ Analiz tamamlandı:")
-        print(f"  - Toplam: {total_records}")
-        print(f"  - Saldırı: {attacks_detected}")
-        print(f"  - Normal: {normal_traffic}")
+        print(f"  - Toplam: {totalRecords}")
+        print(f"  - Saldırı: {attacksDetected}")
+        print(f"  - Normal: {normalTraffic}")
 
-        # Job oluştur
-        job_id = f"job_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        # 7. Analiz job'ı oluştur ve kaydet
+        jobId = f"job_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
         job = AnalysisJob(
-            job_id=job_id,
+            job_id=jobId,
             filename=secure_filename(file.filename),
             status='completed',
-            total_records=total_records,
-            attacks_detected=attacks_detected,
-            normal_traffic=normal_traffic,
-            attack_percentage=attack_percentage,
+            total_records=totalRecords,
+            attacks_detected=attacksDetected,
+            normal_traffic=normalTraffic,
+            attack_percentage=attackPercentage,
             completed_at=datetime.utcnow()
         )
         db.session.add(job)
         db.session.commit()
 
-        # Saldırıları kaydet (ilk 100 detay için - UI'da gösterilecek)
-        data['prediction'] = predictions
-        data['probability'] = probabilities
+        # 8. Prediction sonuçlarını DataFrame'e ekle
+        csvData['prediction'] = predictions
+        csvData['probability'] = probabilities
         
-        # Tüm saldırıları al
-        all_attacks_df = data[data['prediction'] == 1]
+        # 9. Tüm saldırıları filtrele
+        allAttacksDataFrame = csvData[csvData['prediction'] == 1]
         
-        # UI için ilk 100 detaylı liste (en yüksek olasılıklı)
-        top_attacks_df = all_attacks_df.nlargest(100, 'probability')
-
-        # OPTİMİZE: Bulk insert (10x hız artışı) - top 100 için
-        attack_records = []
-        for idx, row in top_attacks_df.iterrows():
-            attack_records.append(DetectedAttack(
-                job_id=job_id,
+        # 10. Veritabanına en yüksek olasılıklı saldırıları kaydet
+        topAttacksDataFrame = allAttacksDataFrame.nlargest(TOP_ATTACKS_LIMIT, 'probability')
+        attackRecords = []
+        for idx, row in topAttacksDataFrame.iterrows():
+            attackRecords.append(DetectedAttack(
+                job_id=jobId,
                 record_index=int(idx),
                 probability=float(row['probability']),
                 proto=str(row.get('proto', 'Unknown')),
@@ -451,114 +568,77 @@ def upload_and_analyze():
                 dest_ip=str(row.get('dstip', 'N/A'))
             ))
         
-        if attack_records:
-            db.session.bulk_save_objects(attack_records)
+        if attackRecords:
+            db.session.bulk_save_objects(attackRecords)
             db.session.commit()
 
-        # TÜM SALDIRILAR için saldırı türü dağılımı hesapla
-        attack_type_counts = {}
-        if 'attack_cat' in all_attacks_df.columns:
-            attack_types = all_attacks_df['attack_cat'].value_counts()
-            attack_type_counts = attack_types.to_dict()
-            print(f"📊 Saldırı türü dağılımı: {attack_type_counts}")
+        # 11. Saldırı türü dağılımını hesapla
+        attackTypeCounts = {}
+        if 'attack_cat' in allAttacksDataFrame.columns:
+            attackTypes = allAttacksDataFrame['attack_cat'].value_counts()
+            attackTypeCounts = attackTypes.to_dict()
+            print(f"📊 Saldırı türü dağılımı: {attackTypeCounts}")
 
-        # TÜM SALDIRILAR için severity dağılımı hesapla
-        all_severity_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
+        # 12. Severity dağılımını hesapla
+        severityCounts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
+        for idx, row in allAttacksDataFrame.iterrows():
+            attackType = str(row.get('attack_cat', 'Unknown'))
+            probability = float(row['probability'])
+            severity = get_severity(attackType, probability)
+            severityCounts[severity] += 1
         
-        # Her saldırı için severity hesapla
-        for idx, row in all_attacks_df.iterrows():
-            attack_type = str(row.get('attack_cat', 'Unknown'))
-            prob = float(row['probability'])
-            severity = get_severity(attack_type, prob)
-            all_severity_counts[severity] += 1
-        
-        print(f"📊 Severity dağılımı (TÜM tehditler): {all_severity_counts}")
+        print(f"📊 Severity dağılımı (TÜM tehditler): {severityCounts}")
 
-        # ÇEŞİTLİLİK: Her kategoriden belirli sayıda örnek al
-        unique_categories = all_attacks_df['attack_cat'].unique() if 'attack_cat' in all_attacks_df.columns else []
-        samples_per_category = max(10, 100 // len(unique_categories)) if len(unique_categories) > 0 else 100
+        # 13. Çeşitli kategorilerden örnekler al
+        uniqueCategories = allAttacksDataFrame['attack_cat'].unique() if 'attack_cat' in allAttacksDataFrame.columns else []
+        samplesPerCategory = max(10, TOP_ATTACKS_LIMIT // len(uniqueCategories)) if len(uniqueCategories) > 0 else TOP_ATTACKS_LIMIT
         
-        varied_attacks_list = []
-        if len(unique_categories) > 0:
-            for cat in unique_categories:
-                cat_df = all_attacks_df[all_attacks_df['attack_cat'] == cat]
-                # Her kategoriden en yüksek olasılıklı olanları al
-                cat_samples = cat_df.nlargest(samples_per_category, 'probability')
-                varied_attacks_list.append(cat_samples)
+        variedAttacksList = []
+        if len(uniqueCategories) > 0:
+            for category in uniqueCategories:
+                categoryDataFrame = allAttacksDataFrame[allAttacksDataFrame['attack_cat'] == category]
+                categorySamples = categoryDataFrame.nlargest(samplesPerCategory, 'probability')
+                variedAttacksList.append(categorySamples)
             
-            # Birleştir
-            varied_df = pd.concat(varied_attacks_list).head(100)  # Max 100
-            print(f"🎯 Çeşitli tehdit seçimi: {len(unique_categories)} kategori, toplam {len(varied_df)} örnek")
+            variedDataFrame = pd.concat(variedAttacksList).head(TOP_ATTACKS_LIMIT)
+            print(f"🎯 Çeşitli tehdit seçimi: {len(uniqueCategories)} kategori, toplam {len(variedDataFrame)} örnek")
         else:
-            varied_df = all_attacks_df.nlargest(100, 'probability')
+            variedDataFrame = allAttacksDataFrame.nlargest(TOP_ATTACKS_LIMIT, 'probability')
 
-        # Detaylı saldırı listesi oluştur (çeşitli örnekler için)
-        attacks_list = []
-        for idx, row in varied_df.iterrows():
-            attack_type = str(row.get('attack_cat', 'Unknown'))
-            prob = float(row['probability'])
-            
-            # Dinamik açıklama oluştur (benzersiz detaylarla)
-            dynamic_desc = generate_dynamic_description(attack_type, row.to_dict(), prob)
-            
-            # Ek detaylar (benzersiz bilgiler)
-            sbytes = int(row.get('sbytes', 0)) if pd.notna(row.get('sbytes')) else 0
-            dbytes = int(row.get('dbytes', 0)) if pd.notna(row.get('dbytes')) else 0
-            dur = float(row.get('dur', 0)) if pd.notna(row.get('dur')) else 0
-            
-            attack = {
-                'type': attack_type,
-                'severity': get_severity(attack_type, prob),
-                'description': dynamic_desc,  # Dinamik açıklama
-                # IP adresleri: CSV'de varsa kullan, yoksa gerçekçi IP oluştur
-                'sourceIP': str(row.get('srcip')) if pd.notna(row.get('srcip')) and str(row.get('srcip')) not in ['', 'N/A', 'nan'] else generate_realistic_ip(attack_type),
-                'targetIP': str(row.get('dstip')) if pd.notna(row.get('dstip')) and str(row.get('dstip')) not in ['', 'N/A', 'nan'] else '10.0.0.' + str(random.randint(1, 254)),
-                'sourcePort': int(row.get('sport', 0)) if pd.notna(row.get('sport')) else None,
-                'targetPort': int(row.get('dsport', 0)) if pd.notna(row.get('dsport')) else None,
-                'protocol': str(row.get('proto', 'Unknown')),
-                'service': str(row.get('service', '-')),
-                'state': str(row.get('state', 'Unknown')),
-                'confidence': prob,
-                'bytesIn': sbytes,
-                'bytesOut': dbytes,
-                'totalBytes': sbytes + dbytes,
-                'duration': dur,
-                'packetsIn': int(row.get('spkts', 0)) if pd.notna(row.get('spkts')) else 0,
-                'packetsOut': int(row.get('dpkts', 0)) if pd.notna(row.get('dpkts')) else 0,
-                'recordId': int(idx),  # Benzersiz ID
-            }
-            attacks_list.append(attack)
+        # 14. Detaylı saldırı listesi oluştur (helper fonksiyon kullan)
+        attacksList = build_attack_details(variedDataFrame)
 
+        # 15. Sonuçları döndür
         return jsonify({
             'success': True,
-            'job_id': job_id,
+            'job_id': jobId,
             'message': 'Analiz tamamlandı',
             'results': {
-                'total_records': total_records,
-                'attacks_detected': attacks_detected,
-                'normal_traffic': normal_traffic,
-                'attack_percentage': attack_percentage,
-                'prediction_time_seconds': round(prediction_time, 2)
+                'total_records': totalRecords,
+                'attacks_detected': attacksDetected,
+                'normal_traffic': normalTraffic,
+                'attack_percentage': attackPercentage,
+                'prediction_time_seconds': round(predictionTime, 2)
             },
-            'severity_summary': all_severity_counts,  # TÜM tehditler için severity
-            'attack_type_distribution': attack_type_counts,  # TÜM tehditler için kategori dağılımı
-            'attacks': attacks_list  # Top 100 detaylı liste
+            'severity_summary': severityCounts,
+            'attack_type_distribution': attackTypeCounts,
+            'attacks': attacksList
         })
 
-    except Exception as e:
-        error_msg = f"❌ HATA: {e}"
-        print(error_msg)
+    except Exception as analysisError:
+        errorMessage = f"❌ HATA: {analysisError}"
+        print(errorMessage)
         
         # Log to file
-        with open("backend_error.log", "a", encoding="utf-8") as f:
-            f.write(f"\n[{datetime.utcnow()}] ERROR in upload_and_analyze:\n")
-            f.write(str(e) + "\n")
+        with open("backend_error.log", "a", encoding="utf-8") as logFile:
+            logFile.write(f"\n[{datetime.utcnow()}] ERROR in upload_and_analyze:\n")
+            logFile.write(str(analysisError) + "\n")
             import traceback
-            traceback.print_exc(file=f)
+            traceback.print_exc(file=logFile)
             
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(analysisError)}), 500
 
 
 @app.route('/api/analyze/status/<job_id>', methods=['GET'])
@@ -582,7 +662,7 @@ def get_job_results(job_id):
 
     attacks = DetectedAttack.query.filter_by(job_id=job_id).order_by(
         DetectedAttack.probability.desc()
-    ).limit(50).all()
+    ).limit(RECENT_ATTACKS_LIMIT).all()
 
     return jsonify({
         'job': job.to_dict(),
@@ -734,7 +814,7 @@ if __name__ == '__main__':
         print("✅ Veritabanı hazır")
 
     # Model kontrolü
-    if model:
+    if mlModel:
         print("✅ AI Model hazır")
     else:
         print("⚠️  Model yüklenemedi ama sunucu başlayacak")
