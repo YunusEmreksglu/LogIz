@@ -244,10 +244,10 @@ export default function Home() {
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-purple-500/5" />
 
             <div className="relative">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              <h2 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-6">
                 Hemen Başlayın
               </h2>
-              <p className="text-gray-400 text-lg max-w-2xl mx-auto mb-10">
+              <p className="text-gray-300 text-lg max-w-2xl mx-auto mb-10">
                 Log dosyanızı yükleyin ve saniyeler içinde güvenlik analizi sonuçlarınızı alın.
                 Kayıt olmadan ücretsiz deneyin.
               </p>

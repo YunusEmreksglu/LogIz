@@ -18,26 +18,31 @@ const colorStyles = {
         icon: 'bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/20',
         border: 'hover:border-cyan-500/50',
         highlight: 'text-cyan-400',
+        title: 'text-cyan-100',
     },
     purple: {
         icon: 'bg-purple-500/10 text-purple-400 group-hover:bg-purple-500/20',
         border: 'hover:border-purple-500/50',
         highlight: 'text-purple-400',
+        title: 'text-purple-100',
     },
     emerald: {
         icon: 'bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20',
         border: 'hover:border-emerald-500/50',
         highlight: 'text-emerald-400',
+        title: 'text-emerald-100',
     },
     amber: {
         icon: 'bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20',
         border: 'hover:border-amber-500/50',
         highlight: 'text-amber-400',
+        title: 'text-amber-100',
     },
     red: {
         icon: 'bg-red-500/10 text-red-400 group-hover:bg-red-500/20',
         border: 'hover:border-red-500/50',
         highlight: 'text-red-400',
+        title: 'text-red-100',
     },
 }
 
@@ -65,8 +70,8 @@ export default function FeatureCard({ icon: Icon, title, description, highlight,
             </div>
 
             {/* Content */}
-            <h3 className="text-xl font-bold text-white mb-3">{title}</h3>
-            <p className="text-gray-400 leading-relaxed mb-4">{description}</p>
+            <h3 className={cn('text-xl font-bold mb-3', styles.title)}>{title}</h3>
+            <p className="text-gray-300 leading-relaxed mb-4">{description}</p>
 
             {/* Highlight */}
             {highlight && (
