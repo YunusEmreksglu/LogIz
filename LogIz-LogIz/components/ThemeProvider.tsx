@@ -31,13 +31,12 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     useEffect(() => {
         setMounted(true)
-        // Get theme from local storage (default to 'dark' for cyber theme)
+        // Get theme from localStorage or system preference
         const savedTheme = localStorage.getItem('logiz-theme') as Theme | null
         if (savedTheme) {
             setThemeState(savedTheme)
-        } else {
-            // Default to dark mode for LogIz
-            setThemeState('dark')
+        } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+            setThemeState('light')
         }
     }, [])
 
