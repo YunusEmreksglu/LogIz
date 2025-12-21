@@ -1,6 +1,6 @@
 'use client'
 
-import { Shield, Upload, Activity, AlertTriangle, Menu, User, LogOut, LayoutDashboard, FileText, Search, Bug, ShieldOff, Radio, Settings } from 'lucide-react'
+import { Shield, Upload, Activity, AlertTriangle, Menu, User, LogOut, LayoutDashboard, FileText, Search, Bug, ShieldOff, Radio, Settings, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ const navigationGroups = [
     category: 'OVERVIEW',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Canlı İzleme', href: '/live-logs', icon: Radio }, // Updated to match current project route /live-logs
+      { name: 'Canlı İzleme', href: '/live', icon: Radio },
     ]
   },
   {
@@ -43,6 +43,7 @@ const navigationGroups = [
   {
     category: 'SYSTEM',
     items: [
+      { name: 'Ajan Yönetimi', href: '/agents', icon: Bot },
       { name: 'Ayarlar', href: '/settings', icon: Settings },
     ]
   },
