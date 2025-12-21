@@ -56,18 +56,36 @@ export async function POST(request: NextRequest) {
 
     // Get userId from session (if logged in)
     const session = await getServerSession(authOptions)
-    const userId = session?.user?.id || undefined // Allow null/undefined for anonymous uploads
+    let userId = session?.user?.id
+
+    // Check if user actually exists in DB (to handle stale sessions after DB reset)
+    if (userId) {
+      const userExists = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true }
+      })
+      if (!userExists) {
+        console.warn(`Stale session detected: User ID ${userId} not found in DB. Treating as anonymous upload.`)
+        userId = undefined
+      }
+    }
+
+    // Build data object - only include userId if user is logged in AND exists
+    const logFileData: any = {
+      filename,
+      originalName: file.name,
+      filePath: `/uploads/${filename}`,
+      fileSize: file.size,
+      fileType: fileExt,
+      status: 'PENDING',
+    }
+
+    if (userId) {
+      logFileData.userId = userId
+    }
 
     const logFile = await prisma.logFile.create({
-      data: {
-        filename,
-        originalName: file.name,
-        filePath: `/uploads/${filename}`,
-        fileSize: file.size,
-        fileType: fileExt,
-        status: 'PENDING',
-        userId,
-      },
+      data: logFileData,
     })
 
     return NextResponse.json({

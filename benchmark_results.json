@@ -1,0 +1,22 @@
+{
+  "test_file": "123.csv",
+  "total_rows": 175341,
+  "feature_count": 34,
+  "batch_size": 10000,
+  "num_batches": 18,
+  "normal": {
+    "time_seconds": 5.11,
+    "speed_rows_per_sec": 34321.0,
+    "attacks_detected": 119885
+  },
+  "batch": {
+    "time_seconds": 12.63,
+    "speed_rows_per_sec": 13888.0,
+    "attacks_detected": 119885
+  },
+  "comparison": {
+    "time_difference_percent": 147.1,
+    "winner": "NORMAL",
+    "advantage_percent": 147.1
+  }
+}

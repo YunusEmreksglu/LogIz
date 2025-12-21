@@ -153,10 +153,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-4">
               Neden LogIz?
             </h2>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            <p className="text-gray-300 text-lg max-w-2xl mx-auto">
               Akademik araştırmalarda kullanılan gerçek siber saldırı verileri ile eğitilmiş yapay zeka
             </p>
           </motion.div>
@@ -219,10 +219,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-4">
               Rakamlarla LogIz
             </h2>
-            <p className="text-gray-400 text-lg">
+            <p className="text-gray-300 text-lg">
               Güçlü altyapımız ve eğitim verilerimiz
             </p>
           </motion.div>
@@ -244,10 +244,10 @@ export default function Home() {
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-purple-500/5" />
 
             <div className="relative">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              <h2 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-6">
                 Hemen Başlayın
               </h2>
-              <p className="text-gray-400 text-lg max-w-2xl mx-auto mb-10">
+              <p className="text-gray-300 text-lg max-w-2xl mx-auto mb-10">
                 Log dosyanızı yükleyin ve saniyeler içinde güvenlik analizi sonuçlarınızı alın.
                 Kayıt olmadan ücretsiz deneyin.
               </p>
@@ -255,7 +255,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
                   href="/upload"
-                  className="group flex items-center space-x-2 px-8 py-4 bg-white rounded-xl font-semibold text-gray-900 hover:shadow-xl hover:shadow-white/25 transition-all duration-300"
+                  className="group flex items-center space-x-2 px-8 py-4 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-xl font-semibold text-white hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300"
                 >
                   <FileSearch className="w-5 h-5" />
                   <span>Log Dosyası Yükle</span>

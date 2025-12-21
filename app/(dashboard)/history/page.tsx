@@ -18,6 +18,7 @@ interface LogFileWithAnalysis {
     threatCount: number
     status: string
     analyzedAt: string
+    result?: any // Python analysis result JSON
     threats: Array<{
       severity: string
     }>
@@ -55,6 +56,26 @@ export default function HistoryPage() {
     if (!analyses || analyses.length === 0) return { critical: 0, high: 0, medium: 0, low: 0 }
 
     const latestAnalysis = analyses[0]
+
+    // Check if we have the full summary from Python result
+    if (latestAnalysis.result && latestAnalysis.result.severity_summary) {
+      const summary = latestAnalysis.result.severity_summary
+      return {
+        critical: summary.CRITICAL || summary.critical || 0,
+        high: summary.HIGH || summary.high || 0,
+        medium: summary.MEDIUM || summary.medium || 0,
+        low: summary.LOW || summary.low || 0,
+      }
+    }
+
+    // Fallback to threat list (capped at 100) or highSeverity column (merged)
+    // Try to use DB columns if result is missing but columns exist
+    if (latestAnalysis.highSeverity !== undefined) {
+      // Note: highSeverity in DB is Critical + High, so we can't distinguish them perfectly
+      // without result JSON. But we can show highSeverity as 'High' and 0 Critical if we must.
+      // However, usually result JSON should be there for new analyses.
+    }
+
     const threats = latestAnalysis.threats || []
 
     return {
@@ -63,6 +84,13 @@ export default function HistoryPage() {
       medium: threats.filter((t: any) => t.severity === 'MEDIUM').length,
       low: threats.filter((t: any) => t.severity === 'LOW').length,
     }
+  }
+
+  const getTotalLogs = (analyses: any[]) => {
+    if (!analyses || analyses.length === 0) return 0
+    const latestAnalysis = analyses[0]
+    // Get totalLogLines from Python API result
+    return latestAnalysis.result?.totalLogLines || 0
   }
 
   return (
@@ -168,7 +196,11 @@ export default function HistoryPage() {
                             <div className="flex items-center space-x-2">
                               <AlertTriangle className="w-4 h-4 text-gray-400" />
                               <span className="text-sm text-gray-400">
-                                {latestAnalysis.threatCount} threats
+                                {getTotalLogs(log.analyses) > 0 && (
+                                  <span className="text-cyber-blue">{getTotalLogs(log.analyses).toLocaleString()} logs</span>
+                                )}
+                                {getTotalLogs(log.analyses) > 0 && ' / '}
+                                <span className="text-cyber-orange">{latestAnalysis.threatCount.toLocaleString()} threats</span>
                               </span>
                             </div>
 

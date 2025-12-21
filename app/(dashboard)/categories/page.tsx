@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { Grid3X3, TrendingUp, AlertTriangle, ShieldCheck } from 'lucide-react'
-import { PageHeader } from '@/components/dashboard'
+import PageHeader from '@/components/dashboard/PageHeader'
 import { cn } from '@/lib/utils'
 
 // Attack categories based on UNSW-NB15 dataset
@@ -75,7 +75,7 @@ export default function CategoriesPage() {
 
     const totalEvents = data.reduce((sum, cat) => sum + cat.count, 0)
     const threatEvents = data.filter(c => c.name !== 'Normal').reduce((sum, cat) => sum + cat.count, 0)
-    const pieData = data.slice(0, 6) // Top 6 for pie chart
+    const pieData = data.slice(0, 10) // Show all categories (max 10)
 
     return (
         <div className="p-8 space-y-6">
@@ -100,6 +100,7 @@ export default function CategoriesPage() {
                         </div>
                         <span className="text-sm text-gray-400">Toplam Olay</span>
                     </div>
+                    {/* Use API stats if available, or fallback to sum */}
                     <div className="text-2xl font-bold text-white">{totalEvents.toLocaleString()}</div>
                     {totalEvents === 0 && <p className="text-xs text-gray-500 mt-1">Henüz analiz yapılmadı</p>}
                 </motion.div>
@@ -132,7 +133,7 @@ export default function CategoriesPage() {
                         <span className="text-sm text-gray-400">Normal Trafik</span>
                     </div>
                     <div className="text-2xl font-bold text-white">
-                        {data.find(d => d.name === 'Normal')?.percentage || 0}%
+                        {Number(data.find(d => d.name === 'Normal')?.percentage || 0).toFixed(1)}%
                     </div>
                 </motion.div>
 
@@ -196,7 +197,7 @@ export default function CategoriesPage() {
                                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                                         <span className="text-sm text-gray-300">{item.name}</span>
                                     </div>
-                                    <span className="text-sm text-gray-400">{item.percentage}%</span>
+                                    <span className="text-sm text-gray-400">{Number(item.percentage).toFixed(1)}%</span>
                                 </div>
                             ))}
                         </div>
@@ -214,7 +215,7 @@ export default function CategoriesPage() {
                     <div className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                                data={data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 6)}
+                                data={data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 10)}
                                 layout="vertical"
                                 margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
                             >
@@ -225,8 +226,9 @@ export default function CategoriesPage() {
                                     type="category"
                                     stroke="#6b7280"
                                     fontSize={11}
-                                    width={120}
+                                    width={150}
                                     tickLine={false}
+                                    interval={0}
                                 />
                                 <Tooltip
                                     contentStyle={{
@@ -240,7 +242,7 @@ export default function CategoriesPage() {
                                     dataKey="count"
                                     radius={[0, 6, 6, 0]}
                                 >
-                                    {data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 6).map((entry, index) => (
+                                    {data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 10).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Bar>
@@ -303,7 +305,7 @@ export default function CategoriesPage() {
                                                     style={{ width: `${category.percentage}%`, backgroundColor: category.color }}
                                                 />
                                             </div>
-                                            <span className="text-sm text-gray-400">{category.percentage}%</span>
+                                            <span className="text-sm text-gray-400">{Number(category.percentage).toFixed(1)}%</span>
                                         </div>
                                     </td>
                                     <td className="px-5 py-4">

@@ -1,0 +1,76 @@
+components/ThreatMap.tsx(5,15): error TS7016: Could not find a declaration file for module 'leaflet'. 'C:/Users/asus/Desktop/LogIz/node_modules/leaflet/dist/leaflet-src.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/leaflet` if it exists or add a new declaration (.d.ts) file containing `declare module 'leaflet';`
+components/ThreatMap.tsx(68,17): error TS2322: Type '{ children: (Element | Element[])[]; center: number[]; zoom: number; style: { height: string; width: string; }; scrollWheelZoom: boolean; }' is not assignable to type 'IntrinsicAttributes & MapContainerProps & RefAttributes<LeafletMap>'.
+  Property 'center' does not exist on type 'IntrinsicAttributes & MapContainerProps & RefAttributes<LeafletMap>'.
+components/ThreatMap.tsx(74,21): error TS2322: Type '{ attribution: string; url: string; }' is not assignable to type 'IntrinsicAttributes & TileLayerProps & RefAttributes<LeafletTileLayer>'.
+  Property 'attribution' does not exist on type 'IntrinsicAttributes & TileLayerProps & RefAttributes<LeafletTileLayer>'.
+components/ThreatMap.tsx(81,25): error TS2322: Type '{ children: Element; key: number; position: number[]; icon: any; }' is not assignable to type 'IntrinsicAttributes & MarkerProps & RefAttributes<LeafletMarker<any>>'.
+  Property 'icon' does not exist on type 'IntrinsicAttributes & MarkerProps & RefAttributes<LeafletMarker<any>>'.
+components/ThreatMap.tsx(83,32): error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & PopupProps & RefAttributes<LeafletPopup>'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & PopupProps & RefAttributes<LeafletPopup>'.
+LogIz-master/app/(auth)/login/page.tsx(9,35): error TS2307: Cannot find module '@/components/landing' or its corresponding type declarations.
+LogIz-master/app/(auth)/register/page.tsx(9,35): error TS2307: Cannot find module '@/components/landing' or its corresponding type declarations.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(10,3): error TS2305: Module '"@/components/dashboard"' has no exported member 'GradientStatCard'.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(11,3): error TS2305: Module '"@/components/dashboard"' has no exported member 'RecentThreatsTable'.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(13,3): error TS2305: Module '"@/components/dashboard"' has no exported member 'TrafficTrendChart'.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(14,3): error TS2305: Module '"@/components/dashboard"' has no exported member 'ThreatDonutChart'.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(83,23): error TS2339: Property 'detectedAt' does not exist on type 'Threat'.
+LogIz-master/app/(dashboard)/dashboard/page.tsx(85,27): error TS2339: Property 'destinationIP' does not exist on type 'Threat'.
+LogIz-master/app/(dashboard)/logs/page.tsx(7,22): error TS2307: Cannot find module '@/components/logs/LogTable' or its corresponding type declarations.
+LogIz-master/app/(dashboard)/logs/page.tsx(8,28): error TS2307: Cannot find module '@/components/logs/LogDetailModal' or its corresponding type declarations.
+LogIz-master/app/(dashboard)/logs/page.tsx(155,30): error TS7006: Parameter 'log' implicitly has an 'any' type.
+LogIz-master/app/api/analyze/route.ts(4,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/analyze/route.ts(5,38): error TS2307: Cannot find module '@/lib/python-api' or its corresponding type declarations.
+LogIz-master/app/api/attack-types/stats/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/attack-types/stats/route.ts(3,29): error TS2307: Cannot find module '@prisma/client' or its corresponding type declarations.
+LogIz-master/app/api/attack-types/stats/route.ts(47,49): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/attack-types/stats/route.ts(48,54): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/attack-types/stats/route.ts(52,31): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/attack-types/stats/route.ts(77,36): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+LogIz-master/app/api/attack-types/stats/route.ts(77,46): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+LogIz-master/app/api/attack-types/stats/route.ts(80,61): error TS2365: Operator '+' cannot be applied to types 'number' and '{}'.
+LogIz-master/app/api/attack-types/stats/route.ts(81,61): error TS2365: Operator '+' cannot be applied to types 'number' and '{}'.
+LogIz-master/app/api/blocked/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/blocked/route.ts(3,29): error TS2307: Cannot find module '@prisma/client' or its corresponding type declarations.
+LogIz-master/app/api/blocked/route.ts(61,49): error TS7006: Parameter 'threat' implicitly has an 'any' type.
+LogIz-master/app/api/blocked/route.ts(61,57): error TS7006: Parameter 'index' implicitly has an 'any' type.
+LogIz-master/app/api/blocked/route.ts(75,47): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/blocked/route.ts(76,46): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+LogIz-master/app/api/blocked/route.ts(76,51): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/blocked/route.ts(81,72): error TS2571: Object is of type 'unknown'.
+LogIz-master/app/api/blocked/route.ts(81,79): error TS2571: Object is of type 'unknown'.
+LogIz-master/app/api/blocked/route.ts(90,41): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/categories/stats/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/categories/stats/route.ts(29,51): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/categories/stats/route.ts(33,51): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+LogIz-master/app/api/categories/stats/route.ts(33,56): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/categories/stats/route.ts(46,17): error TS2322: Type '{}' is not assignable to type 'number'.
+LogIz-master/app/api/stats/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/stats/route.ts(28,43): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(28,48): error TS7006: Parameter 'a' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(30,8): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(30,13): error TS7006: Parameter 'a' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(30,42): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(59,22): error TS7006: Parameter 'analysis' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(60,32): error TS7006: Parameter 'threat' implicitly has an 'any' type.
+LogIz-master/app/api/stats/route.ts(90,40): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/threats/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/threats/route.ts(50,31): error TS7006: Parameter 't' implicitly has an 'any' type.
+LogIz-master/app/api/traffic/trend/route.ts(2,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/api/traffic/trend/route.ts(54,26): error TS7006: Parameter 'analysis' implicitly has an 'any' type.
+LogIz-master/app/api/upload/route.ts(6,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+LogIz-master/app/page.tsx(6,63): error TS2307: Cannot find module '@/components/landing' or its corresponding type declarations.
+LogIz-master/components/logs/LogDetailModal.tsx(7,31): error TS2307: Cannot find module '@/app/(dashboard)/logs/page' or its corresponding type declarations.
+LogIz-master/components/logs/LogDetailModal.tsx(36,22): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ CRITICAL: { bg: string; text: string; border: string; }; HIGH: { bg: string; text: string; border: string; }; MEDIUM: { bg: string; text: string; border: string; }; LOW: { bg: string; text: string; border: string; }; INFO: { ...; }; }'.
+LogIz-master/components/logs/LogTable.tsx(6,31): error TS2307: Cannot find module '@/app/(dashboard)/logs/page' or its corresponding type declarations.
+LogIz-master/components/logs/LogTable.tsx(111,50): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ CRITICAL: { bg: string; text: string; border: string; }; HIGH: { bg: string; text: string; border: string; }; MEDIUM: { bg: string; text: string; border: string; }; LOW: { bg: string; text: string; border: string; }; INFO: { ...; }; }'.
+LogIz-master/components/ThreatMap.tsx(4,37): error TS7016: Could not find a declaration file for module 'leaflet'. 'C:/Users/asus/Desktop/LogIz/node_modules/leaflet/dist/leaflet-src.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/leaflet` if it exists or add a new declaration (.d.ts) file containing `declare module 'leaflet';`
+LogIz-master/components/ThreatMap.tsx(105,17): error TS2322: Type '{ children: (Element | Element[])[]; center: LatLngExpression; zoom: number; style: { height: string; width: string; }; scrollWheelZoom: boolean; }' is not assignable to type 'IntrinsicAttributes & MapContainerProps & RefAttributes<LeafletMap>'.
+  Property 'center' does not exist on type 'IntrinsicAttributes & MapContainerProps & RefAttributes<LeafletMap>'.
+LogIz-master/components/ThreatMap.tsx(117,25): error TS2322: Type '{ children: Element; key: number; position: LatLngExpression; icon: any; }' is not assignable to type 'IntrinsicAttributes & MarkerProps & RefAttributes<LeafletMarker<any>>'.
+  Property 'icon' does not exist on type 'IntrinsicAttributes & MarkerProps & RefAttributes<LeafletMarker<any>>'.
+LogIz-master/prisma/seed.ts(2,81): error TS2307: Cannot find module '@prisma/client' or its corresponding type declarations.
+tailwind.config.ts(4,3): error TS2322: Type '["class"]' is not assignable to type 'DarkModeStrategy | undefined'.
+  Type '["class"]' is not assignable to type '["class", string]'.
+    Source has 1 element(s) but target requires 2.

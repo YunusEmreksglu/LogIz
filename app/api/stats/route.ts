@@ -10,11 +10,13 @@ export async function GET() {
     const [totalLogs, analyses, recentThreats] = await Promise.all([
       prisma.logFile.count(),
       prisma.analysis.findMany({
-        include: {
-          threats: true,
+        select: {
+          threatCount: true,
+          analyzedAt: true,
+          result: true
         },
         orderBy: { analyzedAt: 'desc' },
-        take: 100 // Son 100 analiz
+        // Removed take: 100 to get global stats
       }),
       prisma.threat.findMany({
         orderBy: { timestamp: 'desc' },
@@ -26,10 +28,16 @@ export async function GET() {
     ])
 
     const totalThreats = analyses.reduce((sum, a) => sum + a.threatCount, 0)
-    const criticalThreats = analyses.reduce(
-      (sum, a) => sum + a.threats.filter(t => t.severity === 'CRITICAL').length,
-      0
-    )
+    const criticalThreats = analyses.reduce((sum, a) => {
+      const result = a.result as any
+      return sum + (result?.severity_summary?.CRITICAL || 0)
+    }, 0)
+
+    // Total log lines across all analyses (for consistent "Total Events" display)
+    const totalLogLines = analyses.reduce((sum, a) => {
+      const result = a.result as any
+      return sum + (result?.totalLogLines || a.threatCount || 0)
+    }, 0)
 
     // Last 7 days
     const sevenDaysAgo = new Date()
@@ -57,32 +65,108 @@ export async function GET() {
     }
 
     analyses.forEach(analysis => {
-      analysis.threats.forEach(threat => {
-        // Time aggregation - use threat timestamp or analysis date as fallback
-        const threatDate = threat.timestamp || analysis.analyzedAt
-        if (threatDate) {
-          const dateStr = new Date(threatDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          // Always add to count, even if not in last 7 days map (for current day)
-          threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + 1)
-        }
+      const result = analysis.result as any
 
-        // Type aggregation
-        const type = threat.type.replace('_', ' ')
-        threatTypeMap.set(type, (threatTypeMap.get(type) || 0) + 1)
+      // Time aggregation - use analysis date directly with full count
+      if (analysis.analyzedAt) {
+        const dateStr = new Date(analysis.analyzedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + analysis.threatCount)
+      }
 
-        // Severity aggregation
-        severityMap.set(threat.severity, (severityMap.get(threat.severity) || 0) + 1)
-      })
+      // Type aggregation from JSON result
+      if (result && result.attack_type_distribution) {
+        Object.entries(result.attack_type_distribution).forEach(([type, count]) => {
+          const key = type.toString().replace('_', ' ')
+          threatTypeMap.set(key, (threatTypeMap.get(key) || 0) + (count as number))
+        })
+      }
+
+      // Severity aggregation from JSON result
+      if (result && result.severity_summary) {
+        Object.entries(result.severity_summary).forEach(([severity, count]) => {
+          severityMap.set(severity, (severityMap.get(severity) || 0) + (count as number))
+        })
+      }
     })
+
+
+
+    // Live sessions integration (with error handling)
+    let liveSessions: any[] = []
+    try {
+      liveSessions = await prisma.liveSession.findMany({
+        select: { threatTypes: true, totalLogs: true, startedAt: true }
+      })
+    } catch (e) {
+      console.log('LiveSession query failed in stats:', e)
+    }
+
+    // Include live session logs in totalLogs
+    const liveSessionTotalLogs = liveSessions.reduce((sum, s) => sum + (s.totalLogs || 0), 0)
+
+    // Include live session threats in counts
+    let liveSessionThreats = 0
+
+    // Map SSH threat types to display categories for Top Applications
+    const sshToAttackType: Record<string, string> = {
+      'BRUTE_FORCE': 'Exploits',
+      'INVALID_USER': 'Reconnaissance',
+      'ROOT_LOGIN': 'Backdoor',
+      'SUDO_USAGE': 'Generic',
+      'LOGIN_SUCCESS': 'Normal',
+      'SESSION_OPENED': 'Normal',
+      'SESSION_CLOSED': 'Normal',
+      'CONNECTION_CLOSED': 'Normal'
+    }
+
+    liveSessions.forEach(session => {
+      const types = session.threatTypes as Record<string, number> | null
+      const date = session.startedAt
+
+      if (types) {
+        Object.entries(types).forEach(([sshType, count]) => {
+          // Add to threat counts if not normal
+          if (sshToAttackType[sshType] !== 'Normal') {
+            liveSessionThreats += count
+
+            // Add to distribution
+            const category = sshToAttackType[sshType] || 'Generic'
+            threatTypeMap.set(category, (threatTypeMap.get(category) || 0) + count)
+
+            // Add to severity: BRUTE_FORCE -> High/Critical mapping?
+            // For simplicity, let's map common SSH threats to severity
+            let severity = 'MEDIUM'
+            if (sshType === 'ROOT_LOGIN') severity = 'CRITICAL'
+            if (sshType === 'BRUTE_FORCE') severity = 'HIGH'
+
+            severityMap.set(severity, (severityMap.get(severity) || 0) + count)
+          }
+
+          // Add to timeline
+          if (date) {
+            const dateStr = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            if (threatsOverTimeMap.has(dateStr)) {
+              threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + count)
+            }
+          }
+        })
+      }
+    })
+
+    const finalTotalLogs = totalLogs + liveSessions.length // Total Files + Total Sessions
+
+    const finalTotalThreats = totalThreats + liveSessionThreats
 
     const threatsOverTime = Array.from(threatsOverTimeMap.entries()).map(([date, count]) => ({ date, count }))
     const threatDistribution = Array.from(threatTypeMap.entries()).map(([name, value]) => ({ name, value }))
     const severityDistribution = Array.from(severityMap.entries()).map(([name, value]) => ({ name, value }))
 
     return NextResponse.json({
-      totalLogs,
-      totalThreats,
+      totalLogs: finalTotalLogs,
+      totalThreats: finalTotalThreats,
+      totalLogLines: totalLogLines + liveSessionTotalLogs, // Total analyzed log lines
       criticalThreats,
+
       recentAnalyses,
       threatsOverTime,
       threatDistribution,

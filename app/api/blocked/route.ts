@@ -47,7 +47,7 @@ export async function GET(request: Request) {
             ]
         }
 
-        const [threats, total] = await Promise.all([
+        const [threats, dbTotal] = await Promise.all([
             prisma.threat.findMany({
                 where,
                 orderBy: { timestamp: 'desc' },
@@ -56,6 +56,19 @@ export async function GET(request: Request) {
             }),
             prisma.threat.count({ where })
         ])
+
+        // Calculate TRUE total for the stats card
+        let trueTotalBlocked = dbTotal
+
+        // If no search filter is active, get the true global total from Analysis summaries
+        if (!search) {
+            const aggregation = await prisma.analysis.aggregate({
+                _sum: {
+                    highSeverity: true // This column contains Critical + High sum
+                }
+            })
+            trueTotalBlocked = aggregation._sum.highSeverity || 0
+        }
 
         // Transform threats to blocked connection format
         const blockedConnections = threats.map((threat, index) => ({
@@ -84,7 +97,7 @@ export async function GET(request: Request) {
             success: true,
             data: blockedConnections,
             stats: {
-                totalBlocked: total,
+                totalBlocked: trueTotalBlocked,
                 uniqueIPs,
                 topCountry: topCountry ? topCountry[0] : '—',
                 last24h: threats.filter(t =>
@@ -94,8 +107,8 @@ export async function GET(request: Request) {
             pagination: {
                 page,
                 limit,
-                total,
-                totalPages: Math.ceil(total / limit)
+                total: dbTotal,
+                totalPages: Math.ceil(dbTotal / limit)
             }
         })
     } catch (error) {
