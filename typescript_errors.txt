@@ -1,8 +1,0 @@
-﻿app/api/analyze/route.ts(57,11): error TS2322: Type 'AnalysisResponse' is not assignable to type 'JsonNull | InputJsonValue'.
-  Type 'AnalysisResponse' is not assignable to type 'InputJsonObject'.
-    Index signature for type 'string' is missing in type 'AnalysisResponse'.
-app/api/analyze/route.ts(112,64): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
-  Type 'null' is not assignable to type 'string | undefined'.
-lib/auth.ts(59,27): error TS2339: Property 'role' does not exist on type 'User | AdapterUser'.
-  Property 'role' does not exist on type 'User'.
-lib/auth.ts(66,22): error TS2339: Property 'role' does not exist on type '{ id: string; } & { name?: string | null | undefined; email?: string | null | undefined; image?: string | null | undefined; }'.
