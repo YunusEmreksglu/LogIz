@@ -84,18 +84,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // If no valid user, use anonymous placeholder or skip user_id
+    // Note: log_files.user_id should be nullable in schema for anonymous uploads
+    // Build insert object conditionally
+    const insertData: any = {
+      id: randomUUID(),
+      filename,
+      original_name: file.name,
+      file_path: `/uploads/${filename}`,
+      file_size: file.size,
+      file_type: fileExt,
+      status: 'PENDING',
+    }
+
+    // Only include user_id if it's not null
+    if (userId) {
+      insertData.user_id = userId
+    }
+
     const { data: logFile, error } = await supabaseAdmin
       .from('log_files')
-      .insert({
-        id: randomUUID(),
-        filename,
-        original_name: file.name,
-        file_path: `/uploads/${filename}`,
-        file_size: file.size,
-        file_type: fileExt,
-        status: 'PENDING',
-        user_id: userId,
-      })
+      .insert(insertData)
       .select()
       .single()
 

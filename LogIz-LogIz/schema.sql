@@ -117,3 +117,70 @@ create index if not exists threats_analysis_id_idx on public.threats(analysis_id
 create index if not exists threats_severity_idx on public.threats(severity);
 create index if not exists threats_type_idx on public.threats(type);
 create index if not exists threats_timestamp_idx on public.threats(timestamp);
+
+
+-- ==========================================
+-- 6. API KEYS TABLE (Agent Authentication)
+-- ==========================================
+create table if not exists public.api_keys (
+  id uuid default uuid_generate_v4() primary key,
+  key text not null unique,
+  name text default 'Default Agent Key',
+  is_active boolean default true,
+  user_id uuid references auth.users(id) on delete cascade,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Enable RLS
+alter table public.api_keys enable row level security;
+
+-- Policies
+create policy "Users can view their own api keys"
+  on public.api_keys for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own api keys"
+  on public.api_keys for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own api keys"
+  on public.api_keys for update
+  using (auth.uid() = user_id);
+
+-- Index
+create index if not exists api_keys_user_id_idx on public.api_keys(user_id);
+create index if not exists api_keys_key_idx on public.api_keys(key);
+
+
+-- ==========================================
+-- 7. LIVE LOGS TABLE (Agent Data Storage)
+-- ==========================================
+create table if not exists public.live_logs (
+  id uuid default uuid_generate_v4() primary key,
+  timestamp timestamptz default now(),
+  raw text not null,
+  threat_type text,
+  severity text,
+  description text,
+  source_ip text,
+  username text,
+  source text,
+  user_id uuid references auth.users(id) on delete cascade
+);
+
+-- Enable RLS
+alter table public.live_logs enable row level security;
+
+-- Policies
+create policy "Users can view their own live logs"
+  on public.live_logs for select
+  using (auth.uid() = user_id);
+
+create policy "Insert live logs with valid api key"
+  on public.live_logs for insert
+  with check (true); -- API key validation done at application level
+
+-- Index
+create index if not exists live_logs_timestamp_idx on public.live_logs(timestamp);
+create index if not exists live_logs_severity_idx on public.live_logs(severity);

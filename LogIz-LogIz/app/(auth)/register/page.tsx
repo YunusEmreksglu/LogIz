@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { Shield, Mail, Lock, User, Loader, AlertCircle, CheckCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Shield, Mail, Lock, User, Loader, AlertCircle, CheckCircle, Eye, EyeOff, ArrowRight } from 'lucide-react'
+import { FloatingParticles } from '@/components/landing'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -17,6 +19,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -32,19 +35,18 @@ export default function RegisterPage() {
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      setError('Şifreler eşleşmiyor')
       setLoading(false)
       return
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
+      setError('Şifre en az 6 karakter olmalıdır')
       setLoading(false)
       return
     }
 
     try {
-      // Register user
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -60,7 +62,7 @@ export default function RegisterPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Registration failed')
+        setError(data.error || 'Kayıt başarısız')
         setLoading(false)
         return
       }
@@ -77,66 +79,98 @@ export default function RegisterPage() {
         router.push('/dashboard')
       }, 1500)
     } catch {
-      setError('An error occurred. Please try again.')
+      setError('Bir hata oluştu. Lütfen tekrar deneyin.')
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyber-darker via-cyber-dark to-cyber-darker flex items-center justify-center p-6">
-      {/* Animated Background */}
+    <div className="min-h-screen bg-[#030712] flex items-center justify-center p-6 overflow-hidden">
+      {/* Background Effects */}
+      <FloatingParticles />
+
+      {/* Gradient Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-96 h-96 bg-cyber-purple/10 rounded-full blur-3xl -top-48 -right-48 animate-pulse-slow" />
-        <div className="absolute w-96 h-96 bg-cyber-blue/10 rounded-full blur-3xl -bottom-48 -left-48 animate-pulse-slow" />
+        <div className="absolute w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[120px] -top-48 -right-48" />
+        <div className="absolute w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[120px] -bottom-48 -left-48" />
+        <div className="absolute w-[300px] h-[300px] bg-emerald-500/5 rounded-full blur-[100px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
       </div>
 
       <div className="relative w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center mb-8">
-          <Shield className="w-12 h-12 text-cyber-purple mr-3" />
-          <span className="text-3xl font-bold bg-gradient-to-r from-cyber-purple to-cyber-blue bg-clip-text text-transparent">
-            LogIz
-          </span>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center justify-center mb-8"
+        >
+          <Link href="/" className="flex items-center space-x-3">
+            <div className="relative">
+              <Shield className="w-12 h-12 text-purple-400" />
+              <div className="absolute inset-0 w-12 h-12 bg-purple-400/20 rounded-full blur-lg" />
+            </div>
+            <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              LogIz
+            </span>
+          </Link>
+        </motion.div>
 
         {/* Register Card */}
-        <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-700 rounded-2xl p-8 shadow-2xl">
-          <h1 className="text-2xl font-bold text-white mb-2 text-center">Create Account</h1>
-          <p className="text-gray-400 text-center mb-8">Join LogIz security platform</p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="bg-gray-900/50 backdrop-blur-xl border border-gray-800/50 rounded-3xl p-8 shadow-2xl"
+        >
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-white mb-2">Hesap Oluştur</h1>
+            <p className="text-gray-400">LogIz güvenlik platformuna katılın</p>
+          </div>
 
+          {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-cyber-red/10 border border-cyber-red/20 rounded-lg flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-cyber-red flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-cyber-red">{error}</p>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start space-x-3"
+            >
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-400">{error}</p>
+            </motion.div>
           )}
 
+          {/* Success Message */}
           {success && (
-            <div className="mb-6 p-4 bg-cyber-green/10 border border-cyber-green/20 rounded-lg flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-cyber-green flex-shrink-0 mt-0.5" />
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start space-x-3"
+            >
+              <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm text-cyber-green font-medium">Account created successfully!</p>
-                <p className="text-xs text-gray-400 mt-1">Redirecting to dashboard...</p>
+                <p className="text-sm text-emerald-400 font-medium">Hesap başarıyla oluşturuldu!</p>
+                <p className="text-xs text-gray-400 mt-1">Dashboard'a yönlendiriliyorsunuz...</p>
               </div>
-            </div>
+            </motion.div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
-                Full Name
+                Ad Soyad
               </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-purple-400 transition-colors" />
                 <input
                   id="name"
                   name="name"
                   type="text"
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple transition-colors"
-                  placeholder="John Doe"
+                  className="w-full pl-12 pr-4 py-4 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  placeholder="Adınız Soyadınız"
                 />
               </div>
             </div>
@@ -144,10 +178,10 @@ export default function RegisterPage() {
             {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
+                Email Adresi
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="relative group">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-purple-400 transition-colors" />
                 <input
                   id="email"
                   name="email"
@@ -155,8 +189,8 @@ export default function RegisterPage() {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple transition-colors"
-                  placeholder="you@example.com"
+                  className="w-full pl-12 pr-4 py-4 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  placeholder="ornek@email.com"
                 />
               </div>
             </div>
@@ -164,89 +198,107 @@ export default function RegisterPage() {
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                Password
+                Şifre
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-purple-400 transition-colors" />
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple transition-colors"
+                  className="w-full pl-12 pr-12 py-4 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
-              <p className="mt-1 text-xs text-gray-400">Minimum 6 characters</p>
+              <p className="mt-2 text-xs text-gray-500">En az 6 karakter</p>
             </div>
 
             {/* Confirm Password */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm Password
+                Şifre Tekrar
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-purple-400 transition-colors" />
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple transition-colors"
+                  className="w-full pl-12 pr-4 py-4 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
             {/* Submit Button */}
-            <button
+            <motion.button
               type="submit"
               disabled={loading || success}
-              className="w-full py-3 px-4 bg-gradient-to-r from-cyber-purple to-cyber-blue rounded-lg font-semibold text-white hover:shadow-lg hover:shadow-cyber-purple/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-4 px-4 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl font-semibold text-white hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
               {loading ? (
                 <>
                   <Loader className="w-5 h-5 animate-spin" />
-                  <span>Creating account...</span>
+                  <span>Hesap oluşturuluyor...</span>
                 </>
               ) : success ? (
                 <>
                   <CheckCircle className="w-5 h-5" />
-                  <span>Account created!</span>
+                  <span>Hesap oluşturuldu!</span>
                 </>
               ) : (
-                <span>Create Account</span>
+                <>
+                  <span>Hesap Oluştur</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
               )}
-            </button>
+            </motion.button>
           </form>
 
-          {/* Divider */}
+          {/* Login Link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-400">
-              Already have an account?{' '}
+              Zaten hesabınız var mı?{' '}
               <Link
                 href="/login"
-                className="text-cyber-purple hover:text-cyber-purple/80 font-medium transition-colors"
+                className="text-purple-400 hover:text-purple-300 font-medium transition-colors"
               >
-                Sign in
+                Giriş Yap
               </Link>
             </p>
           </div>
-        </div>
+        </motion.div>
 
         {/* Back to Home */}
-        <div className="mt-6 text-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-8 text-center"
+        >
           <Link
             href="/"
-            className="text-sm text-gray-400 hover:text-white transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-300 transition-colors inline-flex items-center space-x-1"
           >
-            ← Back to Home
+            <span>←</span>
+            <span>Ana Sayfaya Dön</span>
           </Link>
-        </div>
+        </motion.div>
       </div>
     </div>
   )
