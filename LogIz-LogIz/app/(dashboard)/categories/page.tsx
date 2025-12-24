@@ -44,6 +44,7 @@ const riskColors = {
 
 export default function CategoriesPage() {
     const [data, setData] = useState<CategoryData[]>([])
+    const [stats, setStats] = useState<any>({})
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -55,6 +56,7 @@ export default function CategoriesPage() {
 
             if (result.success && result.data) {
                 setData(result.data)
+                setStats(result.stats || {})
             }
         } catch (error) {
             console.error('Failed to fetch categories:', error)
@@ -73,9 +75,10 @@ export default function CategoriesPage() {
         fetchData()
     }
 
-    const totalEvents = data.reduce((sum, cat) => sum + cat.count, 0)
-    const threatEvents = data.filter(c => c.name !== 'Normal').reduce((sum, cat) => sum + cat.count, 0)
-    const pieData = data.slice(0, 6) // Top 6 for pie chart
+    // Use totalLogLines from API if available, otherwise sum from data
+    const totalEvents = stats.totalLogLines || data.reduce((sum, cat) => sum + cat.count, 0)
+    const threatEvents = stats.threatEvents || data.filter(c => c.name !== 'Normal').reduce((sum, cat) => sum + cat.count, 0)
+    const pieData = data.filter(d => d.count > 0) // Show all categories with data
 
     return (
         <div className="p-8 space-y-6">
@@ -211,10 +214,10 @@ export default function CategoriesPage() {
                     className="bg-gray-900/50 rounded-2xl border border-gray-700/50 p-6"
                 >
                     <h3 className="text-lg font-semibold text-white mb-6">Kategoriye Göre Olay Sayısı</h3>
-                    <div className="h-[280px]">
+                    <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                                data={data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 6)}
+                                data={data.filter(d => d.name !== 'Normal' && d.count > 0)}
                                 layout="vertical"
                                 margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
                             >
@@ -224,9 +227,10 @@ export default function CategoriesPage() {
                                     dataKey="name"
                                     type="category"
                                     stroke="#6b7280"
-                                    fontSize={11}
+                                    fontSize={12}
                                     width={120}
                                     tickLine={false}
+                                    interval={0}
                                 />
                                 <Tooltip
                                     contentStyle={{
@@ -240,7 +244,7 @@ export default function CategoriesPage() {
                                     dataKey="count"
                                     radius={[0, 6, 6, 0]}
                                 >
-                                    {data.filter(d => d.name !== 'Normal' && d.count > 0).slice(0, 6).map((entry, index) => (
+                                    {data.filter(d => d.name !== 'Normal' && d.count > 0).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Bar>

@@ -459,14 +459,6 @@ export default function UploadPage() {
                                 )}
                               </div>
                             </div>
-                            {threat.confidence && (
-                              <div className="text-right ml-4">
-                                <p className="text-xs text-gray-500">Güven</p>
-                                <p className="text-sm font-mono text-cyan-400">
-                                  {(threat.confidence * 100).toFixed(0)}%
-                                </p>
-                              </div>
-                            )}
                           </div>
                         </motion.div>
                       ))}

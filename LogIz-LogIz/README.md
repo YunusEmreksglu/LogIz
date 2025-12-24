@@ -28,7 +28,7 @@ Güvenlik log dosyalarınızı yapay zeka ile analiz eden, siber güvenlik tehdi
     npm run dev
     ```
 
-## � Canlı Log Akışı (Docker)
+## 🐳 Canlı Log Akışı (Docker)
 
 Docker konteynerlerinizin loglarını dashboard üzerinde canlı izlemek için:
 
@@ -39,3 +39,17 @@ npx tsx scripts/docker-streamer.ts
 ## 📄 Lisans
 
 MIT License.
+
+## 🔄 Sürüm v1.2 Güncellemeleri (LogIz Branch)
+
+Bu sürümde, log analizi sonuçlarının görselleştirilmesi ve veri akışında önemli iyileştirmeler yapılmıştır:
+
+*   **Gerçek Veri Entegrasyonu**: Dashboard, Kategoriler ve Saldırı Türleri sayfaları artık mock veriler yerine Supabase veritabanından gelen gerçek analiz sonuçlarını kullanıyor.
+*   **Kapsamlı Grafikler**: Kategori ve Saldırı Türü grafiklerindeki "ilk 6" sınırlaması kaldırıldı. Artık tespit edilen *tüm* saldırı türleri (Backdoor, Shellcode, Worms vb.) grafiklerde görüntüleniyor.
+*   **Trafik ve Tehdit Zaman Çizelgeleri**: 
+    *   `Traffic Trend` grafiği artık yüklenen log dosyalarının boyutuna göre gerçek yükleme trafiğini simüle ediyor.
+    *   `Threats Over Time` grafiği gerçek analiz zaman damgalarını kullanıyor.
+*   **Doğru İstatistikler**:
+    *   History sayfasındaki Kritik/Yüksek/Orta seviye sayıları artık `analyses.result` içindeki tam özetten çekiliyor, bu sayede büyük tehdit sayılarında dahi (örn. 100k+) doğru sınıflandırma gösteriliyor.
+    *   Dashboard ve detay sayfalarındaki toplam tehdit sayıları tutarlı hale getirildi (Normal trafik hariç tutularak).
+*   **AI Model İyileştirmeleri**: Random Forest ve XGBoost model karşılaştırmaları yapıldı ve veri seti UNSW-NB15 yapısına uygun hale getirildi.

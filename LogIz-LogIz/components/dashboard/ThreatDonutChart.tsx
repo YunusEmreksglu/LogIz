@@ -50,10 +50,9 @@ export default memo(function ThreatDonutChart({ data, title = "Tehdit Dağılım
                 const result = await response.json()
 
                 if (result.success && result.data) {
-                    // Sadece count > 0 olanları al ve ilk 6'yı göster
+                    // Sadece count > 0 olanları al
                     const filtered = result.data
                         .filter((d: any) => d.count > 0)
-                        .slice(0, 6)
                         .map((d: any) => ({
                             name: d.name,
                             value: d.count,

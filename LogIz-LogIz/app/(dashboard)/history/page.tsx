@@ -54,6 +54,29 @@ export default function HistoryPage() {
     if (!analyses || analyses.length === 0) return { critical: 0, high: 0, medium: 0, low: 0 }
 
     const latestAnalysis = analyses[0]
+    const result = latestAnalysis.result || {}
+
+    // Check for pre-calculated summary in result JSON
+    if (result.summary) {
+      return {
+        critical: result.summary.critical || 0,
+        high: result.summary.high || 0,
+        medium: result.summary.medium || 0,
+        low: result.summary.low || 0
+      }
+    }
+
+    // Check for severity_summary (alternative name used in some contexts)
+    if (result.severity_summary) {
+      return {
+        critical: result.severity_summary.critical || 0,
+        high: result.severity_summary.high || 0,
+        medium: result.severity_summary.medium || 0,
+        low: result.severity_summary.low || 0
+      }
+    }
+
+    // Fallback to counting threats array (might be partial)
     const threats = latestAnalysis.threats || []
 
     return {

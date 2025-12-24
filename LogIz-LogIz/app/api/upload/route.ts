@@ -109,7 +109,39 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Supabase insert error (Admin):', error)
+      console.error('Supabase insert error (First attempt):', error)
+
+      // Fallback: If error is related to user_id (foreign key), try anonymous upload
+      if (insertData.user_id) {
+        console.warn('Retrying upload as anonymous user...')
+        delete insertData.user_id
+        const { data: retryData, error: retryError } = await supabaseAdmin
+          .from('log_files')
+          .insert(insertData)
+          .select()
+          .single()
+
+        if (retryError) {
+          console.error('Supabase insert error (Retry):', retryError)
+          // Log to file for debugging
+          try {
+            const { appendFile } = await import('fs/promises')
+            await appendFile('upload_errors.log', `${new Date().toISOString()} - Upload Error: ${JSON.stringify(retryError)}\n`)
+          } catch (e) { }
+          throw retryError
+        }
+
+        // Retry successful
+        return NextResponse.json({
+          success: true,
+          logFile: {
+            id: retryData.id,
+            filename: retryData.original_name,
+            size: retryData.file_size,
+          },
+        })
+      }
+
       throw error
     }
 

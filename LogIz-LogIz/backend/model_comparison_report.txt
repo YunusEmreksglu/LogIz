@@ -1,0 +1,25 @@
+MODEL KARSILASTIRMA RAPORU - LogIz IDS
+==================================================
+
+Model: Random Forest
+  Accuracy:  99.28%
+  Precision: 99.28%
+  Recall:    99.28%
+  F1-Score:  99.28%
+  AUC-ROC:   0.9997
+  TP: 23797, TN: 11020
+  FP: 180, FN: 72
+  Prediction Time: 0.88s
+
+Model: XGBoost
+  Accuracy:  95.28%
+  Precision: 95.27%
+  Recall:    95.28%
+  F1-Score:  95.25%
+  AUC-ROC:   0.9922
+  TP: 23315, TN: 10099
+  FP: 1101, FN: 554
+  Prediction Time: 0.10s
+
+
+Onerilen Model: Random Forest

@@ -205,6 +205,14 @@ export async function POST(request: NextRequest) {
         id: analysis.id,
         threatCount: analysis.threat_count,
         processingTime: analysis.processing_time,
+        severity_summary: {
+          CRITICAL: analysisResult.summary.critical,
+          HIGH: analysisResult.summary.high,
+          MEDIUM: analysisResult.summary.medium,
+          LOW: analysisResult.summary.low,
+          INFO: analysisResult.summary.info
+        },
+        attack_type_distribution: analysisResult.attack_type_distribution || {},
         threats: threats?.map((t: any) => ({
           ...t,
           sourceIP: t.source_ip,

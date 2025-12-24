@@ -5,15 +5,7 @@ import { authOptions } from '@/lib/auth'
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const userId = session.user.id
-
-    // Use Service Role client to bypass RLS since we validated session
+    // Use Service Role client to get all data (public dashboard)
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -25,55 +17,49 @@ export async function GET() {
       }
     )
 
-    // Get statistics
-    // 1. Total Logs Count
-    const { count: totalLogs, error: logsError } = await supabaseAdmin
-      .from('log_files')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+    // Optional: Check session for user-specific filtering
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id
 
-    if (logsError) throw logsError
-
-    // 2. Analyses with Threats (for calculations)
-    // Now we can filter analyses directly by user_id
-    const { data: analysesData, error: analysesError } = await supabaseAdmin
+    // Get all analyses with their results (contains attack data)
+    let query = supabaseAdmin
       .from('analyses')
-      .select(`
-        *,
-        threats (*)
-      `)
-      .eq('user_id', userId)
+      .select('id, result, threat_count, high_severity, medium_severity, low_severity, analyzed_at, user_id')
+      .order('analyzed_at', { ascending: false })
+      .limit(100)
+
+    // If user is logged in, filter by user
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+
+    const { data: analyses, error: analysesError } = await query
 
     if (analysesError) throw analysesError
 
-    const analyses = analysesData || []
-
-    const totalThreats = analyses.reduce((sum, a) => sum + (a.threat_count || 0), 0)
-
-    // Explicitly type 't' as any or interact carefully since Supabase types might not be inferred here without generics
-    const criticalThreats = analyses.reduce(
-      (sum, a) => sum + (a.threats || []).filter((t: any) => t.severity === 'CRITICAL').length,
-      0
-    )
-
-    // Last 7 days
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-
-    const { count: recentAnalyses, error: recentError } = await supabaseAdmin
-      .from('analyses')
+    // Get log files count
+    let logsQuery = supabaseAdmin
+      .from('log_files')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('analyzed_at', sevenDaysAgo.toISOString())
 
-    if (recentError) throw recentError
+    if (userId) {
+      logsQuery = logsQuery.eq('user_id', userId)
+    }
 
-    // Aggregate data for charts
-    const threatsOverTimeMap = new Map<string, number>()
+    const { count: totalLogs } = await logsQuery
+
+    // Aggregate stats from analyses
+    let totalThreats = 0
+    let criticalThreats = 0
+    let highThreats = 0
+    let mediumThreats = 0
     const threatTypeMap = new Map<string, number>()
     const severityMap = new Map<string, number>()
+    const recentThreats: any[] = []
+    const threatLocations: any[] = []
+    const threatsOverTimeMap = new Map<string, number>()
 
-    // Initialize last 7 days for time chart
+    // Initialize last 7 days
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
@@ -81,87 +67,92 @@ export async function GET() {
       threatsOverTimeMap.set(dateStr, 0)
     }
 
-    analyses.forEach(analysis => {
-      // analysis.threats is an array of objects
-      const threats = analysis.threats || []
-      // Use 'any' or specific type for threat to avoid TS errors during quick refactor if types aren't fully generated
-      threats.forEach((threat: any) => {
-        // Time aggregation
-        if (threat.timestamp) {
-          const dateStr = new Date(threat.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          if (threatsOverTimeMap.has(dateStr)) {
-            threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + 1)
-          }
-        }
+    analyses?.forEach(analysis => {
+      const result = analysis.result as any
+      if (!result) return
 
-        // Type aggregation
-        // Database has snake_case types likely? Or maybe they are stored raw. 
-        // Existing code did replace('_', ' '), let's keep it safe.
-        const type = (threat.type || 'Unknown').replace('_', ' ')
-        threatTypeMap.set(type, (threatTypeMap.get(type) || 0) + 1)
+      totalThreats += analysis.threat_count || 0
 
+      // Severity from result.summary or calculate from threats
+      if (result.summary) {
+        criticalThreats += result.summary.critical || 0
+        highThreats += result.summary.high || 0
+        mediumThreats += result.summary.medium || 0
+      }
+
+      // Attack Type Distribution from result
+      if (result.attack_type_distribution) {
+        Object.entries(result.attack_type_distribution).forEach(([type, count]: [string, any]) => {
+          threatTypeMap.set(type, (threatTypeMap.get(type) || 0) + count)
+        })
+      }
+
+      // Process threats if available
+      const threats = result.threats || []
+      threats.slice(0, 10).forEach((threat: any) => {
         // Severity aggregation
         const severity = threat.severity || 'UNKNOWN'
         severityMap.set(severity, (severityMap.get(severity) || 0) + 1)
+
+        // Time aggregation
+        const dateStr = new Date(analysis.analyzed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        if (threatsOverTimeMap.has(dateStr)) {
+          threatsOverTimeMap.set(dateStr, (threatsOverTimeMap.get(dateStr) || 0) + 1)
+        }
+
+        // Recent threats
+        if (recentThreats.length < 5) {
+          recentThreats.push({
+            id: threat.id || `threat-${recentThreats.length}`,
+            timestamp: threat.timestamp || analysis.analyzed_at,
+            detectedAt: threat.timestamp || analysis.analyzed_at,
+            sourceIP: threat.sourceIP || threat.source_ip || '—',
+            destinationIP: threat.targetIP || threat.target_ip || '—',
+            targetIP: threat.targetIP || threat.target_ip || '—',
+            type: threat.type || 'Unknown',
+            severity: threat.severity,
+            description: threat.description
+          })
+        }
+
+        // Locations
+        if (threat.sourceLat || threat.source_lat) {
+          threatLocations.push({
+            id: threat.id,
+            sourceLat: threat.sourceLat || threat.source_lat,
+            sourceLon: threat.sourceLon || threat.source_lon,
+            sourceCountry: threat.sourceCountry || threat.source_country,
+            sourceIP: threat.sourceIP || threat.source_ip,
+            type: threat.type
+          })
+        }
       })
     })
 
-    // Flatten threats from all analyses
-    let allThreats: any[] = []
-    analyses.forEach(a => {
-      if (a.threats && Array.isArray(a.threats)) {
-        allThreats.push(...a.threats)
-      }
-    })
-
-    // Sort by timestamp desc for Recent Threats
-    allThreats.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-
-    const recentThreatsRaw = allThreats.slice(0, 5)
-
-    const recentThreats = recentThreatsRaw.map(t => ({
-      id: t.id,
-      timestamp: t.timestamp,
-      detectedAt: t.timestamp,
-      sourceIP: t.source_ip,
-      destinationIP: t.target_ip,
-      targetIP: t.target_ip,
-      type: t.type,
-      severity: t.severity,
-      description: t.description
-    }))
-
-    // Threat Locations for Map
-    const threatLocations = allThreats
-      .filter(t => t.source_lat && t.source_lon)
-      .map(t => ({
-        id: t.id,
-        sourceLat: t.source_lat,
-        sourceLon: t.source_lon,
-        sourceCountry: t.source_country,
-        sourceIP: t.source_ip,
-        type: t.type
-      }))
-
+    const recentAnalyses = analyses?.length || 0
     const threatsOverTime = Array.from(threatsOverTimeMap.entries()).map(([date, count]) => ({ date, count }))
-    const threatDistribution = Array.from(threatTypeMap.entries()).map(([name, value]) => ({ name, value }))
+    const threatDistribution = Array.from(threatTypeMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({ name, value }))
     const severityDistribution = Array.from(severityMap.entries()).map(([name, value]) => ({ name, value }))
 
     return NextResponse.json({
       totalLogs: totalLogs || 0,
       totalThreats,
       criticalThreats,
-      recentAnalyses: recentAnalyses || 0,
+      highThreats,
+      mediumThreats,
+      recentAnalyses,
       threatsOverTime,
       threatDistribution,
       severityDistribution,
       recentThreats,
-      threatLocations
+      threatLocations: threatLocations.slice(0, 100)
     })
   } catch (error) {
     console.error('Stats error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch statistics' },
+      { error: 'Failed to fetch statistics', details: String(error) },
       { status: 500 }
     )
   }
