@@ -1,0 +1,10 @@
+{
+  "[project]/components/ThreatMap.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/components/ThreatMap.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_45c9bb4c._.js",
+      "static/chunks/components_ThreatMap_tsx_3b04c0e7._.js",
+      "static/chunks/components_ThreatMap_tsx_a9645d6f._.js"
+    ]
+  }
+}

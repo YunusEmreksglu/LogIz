@@ -1,0 +1,11 @@
+{
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/upload/page": "app/(dashboard)/upload/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/analyze/route": "app/api/analyze/route.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/api/categories/stats/route": "app/api/categories/stats/route.js",
+  "/api/stats/route": "app/api/stats/route.js",
+  "/api/traffic/trend/route": "app/api/traffic/trend/route.js",
+  "/api/upload/route": "app/api/upload/route.js"
+}
